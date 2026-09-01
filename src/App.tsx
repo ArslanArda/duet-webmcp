@@ -1,4 +1,4 @@
-import { Bot, Eraser, MousePointer2, Pencil } from "lucide-react";
+import { Bot, Eraser, MousePointer2, Pencil, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   playProject,
@@ -77,6 +77,7 @@ function App() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.repeat || event.metaKey || event.ctrlKey || event.altKey || isTypingTarget(event.target)) return;
       if (event.code === "Space") { event.preventDefault(); void handlePlay(); return; }
+      if (event.code === "Delete" || event.code === "Backspace") { const current = useProjectStore.getState(); if (current.selection) { event.preventDefault(); current.clearRange(current.selection); } return; }
       const key = event.key.toLowerCase(); const pitch = COMPUTER_KEYS[key];
       if (pitch === undefined || activeComputerNotes.current.has(key)) return;
       event.preventDefault();
@@ -100,7 +101,7 @@ function App() {
   }, [handlePlay, releaseComputerNotes]);
 
   const tools = [{ id: "draw" as const, icon: Pencil, label: t(locale, "draw") }, { id: "select" as const, icon: MousePointer2, label: t(locale, "select") }, { id: "erase" as const, icon: Eraser, label: t(locale, "erase") }]; const tracks = ["melody", "bass", "chords"] as const;
-  return <main className="app-shell"><Header siteToolsReady={siteToolsReady} onConnectMidi={handleConnectMidi} onHelp={() => state.resetOnboarding()} /><Onboarding /><div className="workspace"><section className="editor-panel"><div className="editor-toolbar"><div className="segmented">{tools.map(({ id, icon: Icon, label }) => <button key={id} className={editorMode === id ? "active" : ""} onClick={() => setEditorMode(id)}><Icon size={14} />{label}</button>)}</div><div className="track-tabs">{tracks.map((track) => <button key={track} className={activeTrack === track ? "active" : ""} onClick={() => setActiveTrack(track)}>{t(locale, track)}</button>)}</div><div className="legend"><span><i className="human-dot" />{t(locale, "you")}</span><span><i className="agent-dot" />{t(locale, "ai")}</span></div></div><div className="selection-summary"><span>{selection ? `${t(locale, "selected")}: ${t(locale, selection.trackId)} · ${selection.startBar + 1}–${selection.endBar}` : t(locale, "noSelection")}</span><span className="keyboard-hint">A S D F G H J K L</span></div><div className="editor-scroll"><div className="editor-content"><ChordTrack /><PianoRoll /></div></div><Transport soundReady={soundReady} onEnableSound={enableSound} onPlay={handlePlay} onStop={handleStop} onRecord={handleRecord} onLoopChange={handleLoopChange} /></section><ChangeLog /></div><div className="sr-only" aria-live="polite">{state.announcement}</div><div className="mobile-agent-badge"><Bot size={14} />{state.changeLog.length}</div></main>;
+  return <main className="app-shell"><Header siteToolsReady={siteToolsReady} onConnectMidi={handleConnectMidi} onHelp={() => state.resetOnboarding()} /><Onboarding /><div className="workspace"><section className="editor-panel"><div className="editor-toolbar"><div className="segmented">{tools.map(({ id, icon: Icon, label }) => <button key={id} className={editorMode === id ? "active" : ""} onClick={() => setEditorMode(id)}><Icon size={14} />{label}</button>)}</div><div className="track-tabs">{tracks.map((track) => <button key={track} className={activeTrack === track ? "active" : ""} onClick={() => setActiveTrack(track)}>{t(locale, track)}</button>)}</div><div className="legend"><span><i className="human-dot" />{t(locale, "you")}</span><span><i className="agent-dot" />{t(locale, "ai")}</span></div></div><div className="selection-summary"><span>{selection ? `${t(locale, "selected")}: ${t(locale, selection.trackId)} · ${selection.startBar + 1}–${selection.endBar}` : t(locale, "noSelection")}</span>{selection ? <button className="selection-clear" onClick={() => state.clearRange(selection)}><Trash2 size={12} />{t(locale, "clearSelection")}</button> : <span className="keyboard-hint">A S D F G H J K L</span>}</div><div className="editor-scroll"><div className="editor-content"><ChordTrack /><PianoRoll /></div></div><Transport soundReady={soundReady} onEnableSound={enableSound} onPlay={handlePlay} onStop={handleStop} onRecord={handleRecord} onLoopChange={handleLoopChange} /></section><ChangeLog /></div><div className="sr-only" aria-live="polite">{state.announcement}</div><div className="mobile-agent-badge"><Bot size={14} />{state.changeLog.length}</div></main>;
 }
 
 export default App;

@@ -54,6 +54,7 @@ interface ProjectState {
   addHumanNote: (note: Omit<Note, "id" | "source">) => string;
   updateHumanNote: (id: string, patch: Partial<Pick<Note, "pitch" | "startTick" | "durationTicks" | "velocity">>) => void;
   deleteHumanNote: (id: string) => void;
+  clearRange: (selection: Selection) => void;
   setHumanChord: (bar: number, symbol: string, chordNotes: Note[]) => void;
   commitAgentChange: (input: AgentChangeInput) => Change;
   undoChange: (id: string) => void;
@@ -103,6 +104,18 @@ export const useProjectStore = create<ProjectState>()(persist<ProjectState>((set
     stateVersion: state.stateVersion + 1,
   })),
   deleteHumanNote: (id) => set((state) => ({ project: { ...state.project, notes: state.project.notes.filter((note) => note.id !== id) }, stateVersion: state.stateVersion + 1 })),
+  clearRange: (selection) => set((state) => {
+    const startTick = selection.startBar * 4 * TICKS_PER_BEAT;
+    const endTick = selection.endBar * 4 * TICKS_PER_BEAT;
+    return {
+      project: {
+        ...state.project,
+        notes: state.project.notes.filter((note) => note.trackId !== selection.trackId || note.startTick >= endTick || note.startTick + note.durationTicks <= startTick),
+        chords: selection.trackId === "chords" ? state.project.chords.filter((slot) => slot.bar < selection.startBar || slot.bar >= selection.endBar) : state.project.chords,
+      },
+      stateVersion: state.stateVersion + 1,
+    };
+  }),
   setHumanChord: (bar, symbol, chordNotes) => set((state) => {
     const start = bar * 4 * TICKS_PER_BEAT;
     const end = start + 4 * TICKS_PER_BEAT;

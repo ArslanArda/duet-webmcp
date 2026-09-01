@@ -17,6 +17,7 @@ export const dictionaries = {
     changeUndone: "AI change undone", close: "Close", language: "Language", help: "Help",
     promptJazz: "Add jazz chords to bars 1–4", promptBass: "Write a bass line under it",
     promptMood: "Make bars 5–8 less sad", selected: "Selected", noSelection: "No bars selected",
+    clearSelection: "Clear selection", clearBar: "Clear bar",
   },
   tr: {
     tagline: "İnsan sezgisi, AI armonisi.", key: "Ton", tempo: "Tempo", midiReady: "MIDI hazır",
@@ -34,6 +35,7 @@ export const dictionaries = {
     changeUndone: "AI değişikliği geri alındı", close: "Kapat", language: "Dil", help: "Yardım",
     promptJazz: "1–4. ölçülere caz akorları ekle", promptBass: "Altına bir bas yürüyüşü yaz",
     promptMood: "5–8. ölçüleri daha az hüzünlü yap", selected: "Seçili", noSelection: "Ölçü seçilmedi",
+    clearSelection: "Seçimi temizle", clearBar: "Ölçüyü temizle",
   },
 } as const;
 
