@@ -2,4 +2,63 @@ import { Bot, Clock, Copy, RotateCcw, Sparkles } from "lucide-react";
 import { t } from "../i18n";
 import { useProjectStore } from "../store/projectStore";
 
-export function ChangeLog(){const{locale,changeLog,undoChange,completeOnboarding,resetOnboarding}=useProjectStore();const prompts=[t(locale,"promptJazz"),t(locale,"promptBass"),t(locale,"promptMood")];const copy=async(prompt:string)=>{await navigator.clipboard.writeText(prompt);completeOnboarding(2);useProjectStore.getState().setAnnouncement(t(locale,"copied"));};return <aside className="change-panel"><div className="panel-heading"><div><p className="eyebrow">{t(locale,"session")}</p><h2>{t(locale,"whatChanged")}</h2></div><Sparkles size={18} className="agent-color"/></div><div className="change-list">{changeLog.length?changeLog.map((change)=><article className="change-card" key={change.id}><div className="change-icon"><Bot size={15}/></div><div className="change-body"><p>{change.summary}</p><span><Clock size={11}/>{change.affectedBars.startBar+1}–{change.affectedBars.endBar} · {t(locale,"justNow")}</span><small>{change.explanation}</small><button onClick={()=>undoChange(change.id)}><RotateCcw size={12}/>{t(locale,"undoAi")}</button></div></article>):<div className="empty-state"><Bot size={22}/><p>{t(locale,"noChanges")}</p></div>}</div><div className="prompt-box"><div className="prompt-heading"><span>{t(locale,"tryAsking")}</span><button onClick={resetOnboarding}>{t(locale,"restartGuide")}</button></div>{prompts.map((prompt)=><button className="prompt-chip" key={prompt} onClick={()=>copy(prompt)}><span>“{prompt}”</span><Copy size={13}/></button>)}</div></aside>;}
+export function ChangeLog() {
+  const { locale, changeLog, undoChange, completeOnboarding, resetOnboarding } = useProjectStore();
+  const prompts = [t(locale, "promptJazz"), t(locale, "promptBass"), t(locale, "promptMood")];
+  const copy = async (prompt: string) => {
+    await navigator.clipboard.writeText(prompt);
+    completeOnboarding(2);
+    useProjectStore.getState().setAnnouncement(t(locale, "copied"));
+  };
+  return (
+    <aside className="change-panel">
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">{t(locale, "session")}</p>
+          <h2>{t(locale, "whatChanged")}</h2>
+        </div>
+        <Sparkles size={18} className="agent-color" />
+      </div>
+      <div className="change-list">
+        {changeLog.length ? (
+          changeLog.map((change) => (
+            <article className="change-card" key={change.id}>
+              <div className="change-icon">
+                <Bot size={15} />
+              </div>
+              <div className="change-body">
+                <p>{change.summary}</p>
+                <span>
+                  <Clock size={11} />
+                  {change.affectedBars.startBar + 1}–{change.affectedBars.endBar} · {t(locale, "justNow")}
+                </span>
+                <small>{change.explanation}</small>
+                <button onClick={() => undoChange(change.id)}>
+                  <RotateCcw size={12} />
+                  {t(locale, "undoAi")}
+                </button>
+              </div>
+            </article>
+          ))
+        ) : (
+          <div className="empty-state">
+            <Bot size={22} />
+            <p>{t(locale, "noChanges")}</p>
+          </div>
+        )}
+      </div>
+      <div className="prompt-box">
+        <div className="prompt-heading">
+          <span>{t(locale, "tryAsking")}</span>
+          <button onClick={resetOnboarding}>{t(locale, "restartGuide")}</button>
+        </div>
+        {prompts.map((prompt) => (
+          <button className="prompt-chip" key={prompt} onClick={() => copy(prompt)}>
+            <span>“{prompt}”</span>
+            <Copy size={13} />
+          </button>
+        ))}
+      </div>
+    </aside>
+  );
+}

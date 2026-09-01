@@ -2,15 +2,36 @@ import type { ChordSlot, Note, Project } from "../types";
 import { TICKS_PER_BAR, TICKS_PER_BEAT } from "../types";
 import { voiceChord } from "../music/voicing";
 
-const progression = ["Cm7", "Abmaj7", "Ebmaj7", "Bb7", "Cm7", "Fm7", "G7", "Cm7", "Cm7", "Abmaj7", "Ebmaj7", "Bb7", "Fm7", "Abmaj7", "G7", "Cm7"];
+const progression = [
+  "Cm7",
+  "Abmaj7",
+  "Ebmaj7",
+  "Bb7",
+  "Cm7",
+  "Fm7",
+  "G7",
+  "Cm7",
+  "Cm7",
+  "Abmaj7",
+  "Ebmaj7",
+  "Bb7",
+  "Fm7",
+  "Abmaj7",
+  "G7",
+  "Cm7",
+];
 
 const melodyPitches = [72, 75, 79, 77, 75, 72, 70, 67, 72, 75, 74, 70, 68, 67, 71, 72];
 
 export function createDemoProject(): Project {
   const chords: ChordSlot[] = progression.map((symbol, bar) => ({ bar, symbol, source: "human" }));
-  const chordNotes: Note[] = progression.flatMap((symbol, bar) => voiceChord(symbol, bar).map((draft, index) => ({
-    ...draft, id: `seed-chord-${bar}-${index}`, source: "human" as const,
-  })));
+  const chordNotes: Note[] = progression.flatMap((symbol, bar) =>
+    voiceChord(symbol, bar).map((draft, index) => ({
+      ...draft,
+      id: `seed-chord-${bar}-${index}`,
+      source: "human" as const,
+    })),
+  );
   const melody: Note[] = melodyPitches.map((pitch, index) => ({
     id: `seed-melody-${index}`,
     trackId: "melody",
@@ -20,5 +41,12 @@ export function createDemoProject(): Project {
     velocity: 84,
     source: "human",
   }));
-  return { tempo: 100, keyCenter: "C", mode: "minor", barCount: 16, notes: [...chordNotes, ...melody], chords };
+  return {
+    tempo: 100,
+    keyCenter: "C",
+    mode: "minor",
+    barCount: 16,
+    notes: [...chordNotes, ...melody],
+    chords,
+  };
 }

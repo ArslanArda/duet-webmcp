@@ -3,8 +3,13 @@ import type { ChordSlot, Note, Project } from "../types";
 import { TICKS_PER_BAR } from "../types";
 
 const MODE_ALIASES: Record<string, string> = {
-  major: "major", minor: "natural minor", dorian: "dorian", phrygian: "phrygian",
-  lydian: "lydian", mixolydian: "mixolydian", locrian: "locrian",
+  major: "major",
+  minor: "aeolian",
+  dorian: "dorian",
+  phrygian: "phrygian",
+  lydian: "lydian",
+  mixolydian: "mixolydian",
+  locrian: "locrian",
 };
 
 export const normalizeMode = (mode: string) => MODE_ALIASES[mode.toLowerCase()] ?? mode.toLowerCase();
@@ -33,7 +38,12 @@ function circularDistance(a: number, b: number) {
   return Math.min(distance, 12 - distance);
 }
 
-export function remapPitchToMode(pitch: number, keyCenter: string, fromMode: string, targetMode: string): number {
+export function remapPitchToMode(
+  pitch: number,
+  keyCenter: string,
+  fromMode: string,
+  targetMode: string,
+): number {
   const source = scalePitchClasses(keyCenter, fromMode);
   const target = scalePitchClasses(keyCenter, targetMode);
   if (!source.length || !target.length) return pitch;
@@ -43,11 +53,18 @@ export function remapPitchToMode(pitch: number, keyCenter: string, fromMode: str
   let bestDistance = 13;
   sourceChromas.forEach((candidate, index) => {
     const distance = circularDistance(chroma, candidate);
-    if (distance < bestDistance) { bestDistance = distance; degree = index; }
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      degree = index;
+    }
   });
   const targetChroma = TonalNote.chroma(target[degree % target.length]) ?? chroma;
   const octaveBase = Math.floor(pitch / 12) * 12;
-  const candidates = [octaveBase + targetChroma - 12, octaveBase + targetChroma, octaveBase + targetChroma + 12];
+  const candidates = [
+    octaveBase + targetChroma - 12,
+    octaveBase + targetChroma,
+    octaveBase + targetChroma + 12,
+  ];
   return Math.max(0, Math.min(127, candidates.sort((a, b) => Math.abs(a - pitch) - Math.abs(b - pitch))[0]));
 }
 
@@ -98,16 +115,30 @@ export interface HarmonyAnalysis {
 export function analyzeProjectHarmony(project: Project, startBar: number, endBar: number): HarmonyAnalysis {
   const start = startBar * TICKS_PER_BAR;
   const end = endBar * TICKS_PER_BAR;
-  const notes = project.notes.filter((note) => note.startTick < end && note.startTick + note.durationTicks > start);
-  const pitchClasses = [...new Set(notes.map((note) => TonalNote.pitchClass(midiToPitchName(note.pitch))))].filter(Boolean);
+  const notes = project.notes.filter(
+    (note) => note.startTick < end && note.startTick + note.durationTicks > start,
+  );
+  const pitchClasses = [
+    ...new Set(notes.map((note) => TonalNote.pitchClass(midiToPitchName(note.pitch)))),
+  ].filter(Boolean);
   const candidateModes = ["major", "minor", "dorian", "mixolydian", "lydian", "phrygian"];
-  const bestFitMode = candidateModes
-    .map((mode) => ({ mode, score: pitchClasses.filter((pc) => scalePitchClasses(project.keyCenter, mode).includes(pc)).length }))
-    .sort((a, b) => b.score - a.score)[0]?.mode ?? project.mode;
+  const bestFitMode =
+    candidateModes
+      .map((mode) => ({
+        mode,
+        score: pitchClasses.filter((pc) => scalePitchClasses(project.keyCenter, mode).includes(pc)).length,
+      }))
+      .sort((a, b) => b.score - a.score)[0]?.mode ?? project.mode;
   const slots = project.chords.filter((slot) => slot.bar >= startBar && slot.bar < endBar);
   return {
-    range: { startBar, endBar }, pitchClasses, bestFitMode,
-    detectedChords: slots.map((slot) => ({ bar: slot.bar, symbol: slot.symbol, roman: romanForChord(slot.symbol, project.keyCenter) })),
+    range: { startBar, endBar },
+    pitchClasses,
+    bestFitMode,
+    detectedChords: slots.map((slot) => ({
+      bar: slot.bar,
+      symbol: slot.symbol,
+      roman: romanForChord(slot.symbol, project.keyCenter),
+    })),
   };
 }
 

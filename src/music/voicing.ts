@@ -27,8 +27,11 @@ export function voiceChord(symbol: string, bar: number, style: "block" | "arpegg
   if (!pitches.length) return [];
   if (style === "block") {
     return pitches.slice(0, 4).map((pitch) => ({
-      trackId: "chords", pitch, startTick: bar * TICKS_PER_BAR,
-      durationTicks: TICKS_PER_BAR - 30, velocity: 72,
+      trackId: "chords",
+      pitch,
+      startTick: bar * TICKS_PER_BAR,
+      durationTicks: TICKS_PER_BAR - 30,
+      velocity: 72,
     }));
   }
   return Array.from({ length: BEATS_PER_BAR * 2 }, (_, index) => ({
