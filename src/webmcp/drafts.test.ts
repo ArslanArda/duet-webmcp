@@ -7,12 +7,22 @@ const tool = (name: string) => webMCPTools.find((item) => item.name === name)!;
 
 describe("drafts and awareness", () => {
   beforeEach(() => {
-    projectStore.setState({ project: createDemoProject(), drafts: [], activeDraftId: null, changeLog: [], past: [], future: [] });
+    projectStore.setState({
+      project: createDemoProject(),
+      drafts: [],
+      activeDraftId: null,
+      changeLog: [],
+      past: [],
+      future: [],
+    });
   });
 
   it("keeps musical edits as drafts until the person accepts", async () => {
     const before = projectStore.getState().project.chords.map((slot) => slot.symbol);
-    const result = (await tool("set_chord_progression").execute({ startBar: 0, chords: ["Dm7", "G7", "Cmaj7", "Cmaj7"] })) as {
+    const result = (await tool("set_chord_progression").execute({
+      startBar: 0,
+      chords: ["Dm7", "G7", "Cmaj7", "Cmaj7"],
+    })) as {
       ok: boolean;
       draft?: boolean;
       draftId: string;
@@ -20,7 +30,9 @@ describe("drafts and awareness", () => {
     expect(result).toMatchObject({ ok: true, draft: true });
     expect(projectStore.getState().project.chords.map((slot) => slot.symbol)).toEqual(before);
     expect(projectStore.getState().drafts).toHaveLength(1);
-    const accepted = (await tool("resolve_draft").execute({ action: "accept", draftId: result.draftId })) as { ok: boolean };
+    const accepted = (await tool("resolve_draft").execute({ action: "accept", draftId: result.draftId })) as {
+      ok: boolean;
+    };
     expect(accepted.ok).toBe(true);
     expect(projectStore.getState().project.chords[0].symbol).toBe("Dm7");
     expect(projectStore.getState().drafts).toHaveLength(0);
@@ -34,7 +46,12 @@ describe("drafts and awareness", () => {
   });
 
   it("offers several options at once", async () => {
-    const result = (await tool("propose_variations").execute({ kind: "chords", startBar: 0, endBar: 4, count: 3 })) as {
+    const result = (await tool("propose_variations").execute({
+      kind: "chords",
+      startBar: 0,
+      endBar: 4,
+      count: 3,
+    })) as {
       ok: boolean;
       drafts: Array<{ id: string; label: string }>;
     };
@@ -46,7 +63,11 @@ describe("drafts and awareness", () => {
   });
 
   it("answers a phrase in the following bars", async () => {
-    const result = (await tool("answer_phrase").execute({ sourceStartBar: 0, sourceEndBar: 2, style: "echo" })) as {
+    const result = (await tool("answer_phrase").execute({
+      sourceStartBar: 0,
+      sourceEndBar: 2,
+      style: "echo",
+    })) as {
       ok: boolean;
       draft: boolean;
       affectedBars: { startBar: number; endBar: number };
@@ -72,7 +93,9 @@ describe("drafts and awareness", () => {
     };
     expect(suggestions.ok).toBe(true);
     expect(suggestions.options.length).toBeGreaterThanOrEqual(2);
-    projectStore.getState().addHumanNote({ trackId: "bass", pitch: 40, startTick: 0, durationTicks: 480, velocity: 80 });
+    projectStore
+      .getState()
+      .addHumanNote({ trackId: "bass", pitch: 40, startTick: 0, durationTicks: 480, velocity: 80 });
     const activity = (await tool("get_recent_activity").execute({})) as {
       ok: boolean;
       humanEvents: Array<{ type: string }>;
@@ -82,7 +105,12 @@ describe("drafts and awareness", () => {
   });
 
   it("labels sections and changes sounds as undoable changes", async () => {
-    await tool("set_sections").execute({ sections: [{ startBar: 0, name: "Intro" }, { startBar: 4, name: "Chorus" }] });
+    await tool("set_sections").execute({
+      sections: [
+        { startBar: 0, name: "Intro" },
+        { startBar: 4, name: "Chorus" },
+      ],
+    });
     expect(projectStore.getState().project.sections).toEqual([
       { startBar: 0, name: "Intro" },
       { startBar: 4, name: "Chorus" },

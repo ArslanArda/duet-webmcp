@@ -36,35 +36,35 @@ export function DraftBar() {
 
   return (
     <div className="draft-bar" role="region" aria-label={t(locale, "draftTitle")}>
-      <span className="draft-icon">
-        <Sparkles size={15} />
-      </span>
-      <div className="draft-body">
+      <div className="draft-top">
+        <span className="draft-icon">
+          <Sparkles size={15} />
+        </span>
         <div className="draft-head">
           <b>{drafts.length > 1 ? t(locale, "draftTitleMany") : t(locale, "draftTitle")}</b>
           <small>{t(locale, "draftHint")}</small>
         </div>
-        {drafts.length > 1 ? (
-          <div className="draft-options">
-            {drafts.map((draft, index) => (
-              <button
-                type="button"
-                key={draft.id}
-                className={`chip draft-chip ${draft.id === active.id ? "active" : ""}`}
-                onClick={() => setActiveDraft(draft.id)}
-                title={draft.explanation}
-              >
-                <b>{String.fromCharCode(65 + index)}</b>
-                <span>{draft.label}</span>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <p className="draft-summary">
-            <b>{active.label}</b> · {active.explanation}
-          </p>
-        )}
       </div>
+      {drafts.length > 1 ? (
+        <div className="draft-options">
+          {drafts.map((draft, index) => (
+            <button
+              type="button"
+              key={draft.id}
+              className={`chip draft-chip ${draft.id === active.id ? "active" : ""}`}
+              onClick={() => setActiveDraft(draft.id)}
+              title={draft.explanation}
+            >
+              <b>{String.fromCharCode(65 + index)}</b>
+              <span>{draft.label}</span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="draft-summary">
+          <b>{active.label}</b> · {active.explanation}
+        </p>
+      )}
       <div className="draft-actions">
         <button type="button" className="button" onClick={() => void listen()}>
           <Volume2 size={15} /> {t(locale, "draftListen")}

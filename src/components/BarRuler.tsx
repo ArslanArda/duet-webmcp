@@ -79,7 +79,7 @@ export function BarRuler() {
           className={`ruler-cell ${shown && bar >= shown.startBar && bar < shown.endBar ? "selected" : ""} ${!preview && selectionSource === "agent" ? "agent" : ""} ${bar % 4 === 0 ? "strong" : ""}`}
           style={{ width: barWidth }}
         >
-          {sections.find((section) => section.startBar === bar) ? (
+          {barWidth >= 72 && sections.find((section) => section.startBar === bar) ? (
             <span className="section-label" title={t(locale, "sectionLabel")}>
               {sections.find((section) => section.startBar === bar)!.name}
             </span>

@@ -234,7 +234,10 @@ export function describeActivity(activity: Activity, locale: Locale): string {
       text = t(locale, key(activity.tool), { bars: affected });
       break;
     case "resolve_draft":
-      text = t(locale, `${running ? "actRun" : "actDone"}_resolve_${String(a.action ?? "accept")}` as TranslationKey);
+      text = t(
+        locale,
+        `${running ? "actRun" : "actDone"}_resolve_${String(a.action ?? "accept")}` as TranslationKey,
+      );
       break;
     case "set_sections":
       text = t(locale, key(activity.tool), { count: Array.isArray(a.sections) ? a.sections.length : 0 });

@@ -1624,35 +1624,33 @@ button.step:hover {
 /* ---------- drafts, sections, sounds ---------- */
 .draft-bar {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 8px;
   padding: 10px 12px;
   border-top: 1px solid rgba(244, 168, 82, 0.4);
   background: linear-gradient(180deg, #1c1811, #171410);
 }
+.draft-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 .draft-icon {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
   display: grid;
   place-items: center;
   color: var(--agent);
   background: var(--agent-soft);
   flex: none;
 }
-.draft-body {
-  flex: 1;
-  min-width: 220px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
 .draft-head {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 4px 10px;
+  gap: 2px 10px;
+  min-width: 0;
 }
 .draft-head b {
   font-size: var(--fs-2);
@@ -1667,6 +1665,7 @@ button.step:hover {
   font-size: var(--fs-1);
   color: var(--text-2);
   line-height: 1.4;
+  padding-left: 38px;
 }
 .draft-summary b {
   color: var(--text);
@@ -1676,6 +1675,7 @@ button.step:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  padding-left: 38px;
 }
 .draft-chip {
   flex-direction: row;
@@ -1712,6 +1712,7 @@ button.step:hover {
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
+  padding-left: 38px;
 }
 .chord-cell.draft {
   background: rgba(244, 168, 82, 0.12);
