@@ -151,3 +151,12 @@ export function notesInBars(notes: Note[], startBar: number, endBar: number): No
 export function chordsInBars(chords: ChordSlot[], startBar: number, endBar: number): ChordSlot[] {
   return chords.filter((chord) => chord.bar >= startBar && chord.bar < endBar);
 }
+
+/** Chromas (0-11) of the pitches that belong to the key's scale; used to shade the grid. */
+export function scaleChromas(keyCenter: string, mode: string): Set<number> {
+  return new Set(
+    scalePitchClasses(keyCenter, mode)
+      .map((note) => TonalNote.chroma(note))
+      .filter((chroma): chroma is number => chroma !== null && chroma !== undefined),
+  );
+}

@@ -1,8 +1,18 @@
 import * as Tone from "tone";
 import type { Note, Project, TrackId } from "../types";
 import { TICKS_PER_BAR, TICKS_PER_BEAT } from "../types";
+import { setPlayheadTick } from "./playhead";
 
 let synths: Record<TrackId, Tone.PolySynth> | null = null;
+let click: Tone.Synth | null = null;
+let animationFrame = 0;
+let activeRun: {
+  rangeStartTick: number;
+  rangeTicks: number;
+  loop: boolean;
+  offsetSeconds: number;
+  tempo: number;
+} | null = null;
 
 function getSynths() {
   if (!synths) {
@@ -27,19 +37,55 @@ function getSynths() {
   return synths;
 }
 
+function getClick() {
+  if (!click) {
+    click = new Tone.Synth({
+      oscillator: { type: "square" },
+      envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.03 },
+    }).toDestination();
+    click.volume.value = -16;
+  }
+  return click;
+}
+
 export const isAudioUnlocked = () => Tone.getContext().state === "running";
+
 export async function unlockAudio() {
   await Tone.start();
   getSynths();
   return isAudioUnlocked();
 }
 
-function secondsForTicks(ticks: number, bpm: number) {
-  return (ticks / TICKS_PER_BEAT) * (60 / bpm);
-}
+const secondsForTicks = (ticks: number, bpm: number) => (ticks / TICKS_PER_BEAT) * (60 / bpm);
+const ticksForSeconds = (seconds: number, bpm: number) => (seconds / 60) * bpm * TICKS_PER_BEAT;
+const toFrequency = (pitch: number) => Tone.Frequency(pitch, "midi").toFrequency();
 
 export function releasePreviewNotes() {
   if (synths) Object.values(synths).forEach((synth) => synth.releaseAll());
+}
+
+function stopPlayheadLoop() {
+  if (animationFrame) cancelAnimationFrame(animationFrame);
+  animationFrame = 0;
+  activeRun = null;
+  setPlayheadTick(null);
+}
+
+function startPlayheadLoop() {
+  const transport = Tone.getTransport();
+  const frame = () => {
+    if (!activeRun) return;
+    const elapsed = transport.seconds - activeRun.offsetSeconds;
+    let tick = activeRun.rangeStartTick;
+    if (elapsed > 0) {
+      const rangeSeconds = secondsForTicks(activeRun.rangeTicks, activeRun.tempo);
+      const within = activeRun.loop ? elapsed % rangeSeconds : Math.min(elapsed, rangeSeconds);
+      tick = activeRun.rangeStartTick + ticksForSeconds(within, activeRun.tempo);
+    }
+    setPlayheadTick(tick);
+    animationFrame = requestAnimationFrame(frame);
+  };
+  animationFrame = requestAnimationFrame(frame);
 }
 
 export function stopPlayback() {
@@ -47,63 +93,132 @@ export function stopPlayback() {
   transport.stop();
   transport.cancel(0);
   releasePreviewNotes();
+  stopPlayheadLoop();
 }
+
+export const isPlaybackRunning = () => activeRun !== null;
 
 export async function startPreviewNote(note: Pick<Note, "pitch" | "velocity" | "trackId">) {
   await unlockAudio();
-  getSynths()[note.trackId].triggerAttack(
-    Tone.Frequency(note.pitch, "midi").toFrequency(),
-    undefined,
-    note.velocity / 127,
-  );
+  getSynths()[note.trackId].triggerAttack(toFrequency(note.pitch), undefined, note.velocity / 127);
 }
 
 export function stopPreviewNote(note: Pick<Note, "pitch" | "trackId">) {
   if (!synths) return;
-  synths[note.trackId].triggerRelease(Tone.Frequency(note.pitch, "midi").toFrequency());
-}
-
-export function playProject(project: Project, startBar = 0, endBar = project.barCount, loop = false) {
-  if (!isAudioUnlocked()) return false;
-  stopPlayback();
-  const transport = Tone.getTransport();
-  const instruments = getSynths();
-  transport.bpm.value = project.tempo;
-  const rangeStart = startBar * TICKS_PER_BAR;
-  const rangeEnd = endBar * TICKS_PER_BAR;
-  const loopDuration = secondsForTicks(rangeEnd - rangeStart, project.tempo);
-  project.notes
-    .filter((note) => note.startTick < rangeEnd && note.startTick + note.durationTicks > rangeStart)
-    .forEach((note) => {
-      const offset = Math.max(0, note.startTick - rangeStart);
-      const duration = secondsForTicks(
-        Math.min(note.durationTicks, rangeEnd - Math.max(note.startTick, rangeStart)),
-        project.tempo,
-      );
-      const playNote = (time: number) =>
-        instruments[note.trackId].triggerAttackRelease(
-          Tone.Frequency(note.pitch, "midi").toFrequency(),
-          duration,
-          time,
-          note.velocity / 127,
-        );
-      const startTime = secondsForTicks(offset, project.tempo);
-      if (loop) transport.scheduleRepeat(playNote, loopDuration, startTime);
-      else transport.schedule(playNote, startTime);
-    });
-  transport.loop = false;
-  transport.loopStart = 0;
-  transport.loopEnd = loopDuration;
-  transport.start();
-  return true;
+  synths[note.trackId].triggerRelease(toFrequency(note.pitch));
 }
 
 export async function previewNote(note: Pick<Note, "pitch" | "velocity" | "trackId">, duration = "8n") {
   await unlockAudio();
   getSynths()[note.trackId].triggerAttackRelease(
-    Tone.Frequency(note.pitch, "midi").toFrequency(),
+    toFrequency(note.pitch),
     duration,
     undefined,
     note.velocity / 127,
   );
+}
+
+/** Plays several pitches together, used by the chord picker and the key/mode picker. */
+export async function previewPitches(pitches: number[], trackId: TrackId = "chords", durationSeconds = 0.9) {
+  if (!pitches.length) return;
+  await unlockAudio();
+  const synth = getSynths()[trackId];
+  synth.releaseAll();
+  synth.triggerAttackRelease(pitches.map(toFrequency), durationSeconds, undefined, 0.6);
+}
+
+export interface PlayOptions {
+  loop?: boolean;
+  /** Beats of metronome clicks before the range starts (used when recording). */
+  countInBeats?: number;
+  /** Click on every beat of the range while it plays. */
+  metronome?: boolean;
+  /** Fired on the UI thread when the count-in is over and the range actually starts. */
+  onRangeStart?: () => void;
+  /** Fired on the UI thread when a non-looping run reaches the end of the range. */
+  onEnded?: () => void;
+}
+
+export function playProject(
+  project: Project,
+  startBar = 0,
+  endBar = project.barCount,
+  options: PlayOptions = {},
+) {
+  if (!isAudioUnlocked()) return false;
+  stopPlayback();
+  const transport = Tone.getTransport();
+  const instruments = getSynths();
+  const tempo = project.tempo;
+  transport.bpm.value = tempo;
+
+  const rangeStart = startBar * TICKS_PER_BAR;
+  const rangeEnd = endBar * TICKS_PER_BAR;
+  const rangeSeconds = secondsForTicks(rangeEnd - rangeStart, tempo);
+  const countIn = Math.max(0, options.countInBeats ?? 0);
+  const offset = secondsForTicks(countIn * TICKS_PER_BEAT, tempo);
+  const loop = Boolean(options.loop);
+  const draw = Tone.getDraw();
+
+  project.notes
+    .filter((note) => note.startTick < rangeEnd && note.startTick + note.durationTicks > rangeStart)
+    .forEach((note) => {
+      const startOffset = Math.max(0, note.startTick - rangeStart);
+      const clippedTicks = Math.min(note.durationTicks, rangeEnd - Math.max(note.startTick, rangeStart));
+      const duration = secondsForTicks(clippedTicks, tempo);
+      const startTime = offset + secondsForTicks(startOffset, tempo);
+      const playNote = (time: number) =>
+        instruments[note.trackId].triggerAttackRelease(
+          toFrequency(note.pitch),
+          duration,
+          time,
+          note.velocity / 127,
+        );
+      if (loop) transport.scheduleRepeat(playNote, rangeSeconds, startTime);
+      else transport.schedule(playNote, startTime);
+    });
+
+  const beatSeconds = 60 / tempo;
+  if (countIn > 0 || options.metronome) {
+    const metronome = getClick();
+    const tick = (accent: boolean) => (time: number) =>
+      metronome.triggerAttackRelease(accent ? 1760 : 1175, 0.03, time, accent ? 0.9 : 0.5);
+    for (let beat = 0; beat < countIn; beat += 1) transport.schedule(tick(beat === 0), beat * beatSeconds);
+    if (options.metronome) {
+      const beatsInRange = (rangeEnd - rangeStart) / TICKS_PER_BEAT;
+      for (let beat = 0; beat < beatsInRange; beat += 1) {
+        const time = offset + beat * beatSeconds;
+        const handler = tick(beat % 4 === 0);
+        if (loop) transport.scheduleRepeat(handler, rangeSeconds, time);
+        else transport.schedule(handler, time);
+      }
+    }
+  }
+
+  const onRangeStart = options.onRangeStart;
+  if (onRangeStart && offset > 0) transport.scheduleOnce((time) => draw.schedule(onRangeStart, time), offset);
+  if (!loop) {
+    const onEnded = options.onEnded;
+    transport.scheduleOnce(
+      (time) =>
+        draw.schedule(() => {
+          stopPlayback();
+          onEnded?.();
+        }, time),
+      offset + rangeSeconds + 0.02,
+    );
+  }
+
+  transport.loop = false;
+  activeRun = {
+    rangeStartTick: rangeStart,
+    rangeTicks: rangeEnd - rangeStart,
+    loop,
+    offsetSeconds: offset,
+    tempo,
+  };
+  transport.start();
+  startPlayheadLoop();
+  if (onRangeStart && offset === 0) onRangeStart();
+  return true;
 }

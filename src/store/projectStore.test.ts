@@ -34,9 +34,43 @@ describe("agent change history", () => {
       durationTicks: 240,
       velocity: 80,
     });
-    projectStore.getState().clearRange({ trackId: "melody", startBar: 0, endBar: 1 });
+    projectStore.getState().deleteInRange({ trackId: "melody", startBar: 0, endBar: 1 });
     const ids = new Set(projectStore.getState().project.notes.map((note) => note.id));
     expect(ids.has(removedId)).toBe(false);
     expect(ids.has(keptId)).toBe(true);
+  });
+
+  it("undoes and redoes human edits as whole steps", () => {
+    const store = projectStore.getState();
+    const before = store.project.notes.length;
+    store.addHumanNote({ trackId: "melody", pitch: 64, startTick: 480, durationTicks: 240, velocity: 80 });
+    const id = projectStore.getState().project.notes.at(-1)!.id;
+    projectStore.getState().updateHumanNote(id, { pitch: 65 });
+    projectStore.getState().updateHumanNote(id, { pitch: 67 });
+    expect(projectStore.getState().project.notes.length).toBe(before + 1);
+    expect(projectStore.getState().undo()).toBe(true);
+    expect(projectStore.getState().project.notes.length).toBe(before);
+    expect(projectStore.getState().redo()).toBe(true);
+    expect(projectStore.getState().project.notes.find((note) => note.id === id)?.pitch).toBe(67);
+  });
+
+  it("keeps the AI change log consistent through global undo", async () => {
+    const tool = webMCPTools.find((item) => item.name === "set_tempo")!;
+    const tempo = projectStore.getState().project.tempo;
+    await tool.execute({ bpm: tempo + 3 });
+    const logLength = projectStore.getState().changeLog.length;
+    projectStore.getState().undo();
+    expect(projectStore.getState().project.tempo).toBe(tempo);
+    expect(projectStore.getState().changeLog.length).toBe(logLength - 1);
+    projectStore.getState().redo();
+    expect(projectStore.getState().project.tempo).toBe(tempo + 3);
+    expect(projectStore.getState().changeLog.length).toBe(logLength);
+  });
+
+  it("keeps the selection when switching tracks", () => {
+    const store = projectStore.getState();
+    store.setSelection({ trackId: "melody", startBar: 2, endBar: 6 });
+    store.setActiveTrack("bass");
+    expect(projectStore.getState().selection).toEqual({ trackId: "bass", startBar: 2, endBar: 6 });
   });
 });

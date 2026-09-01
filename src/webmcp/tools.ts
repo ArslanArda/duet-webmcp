@@ -634,11 +634,14 @@ export const webMCPTools: WebMCPTool[] = [
           error: {
             code: "AUDIO_LOCKED",
             message: "Browser audio needs one user gesture before an agent can start playback.",
-            hint: "Ask the user to click Enable sound or Play once, then retry.",
+            hint: "Ask the user to press Play once, then retry.",
             retryable: true,
           },
         };
-      playProject(state.project, range.startBar, range.endBar, Boolean(args.loop));
+      playProject(state.project, range.startBar, range.endBar, {
+        loop: Boolean(args.loop),
+        onEnded: () => projectStore.getState().setPlaying(false),
+      });
       projectStore.getState().setPlaying(true);
       projectStore.getState().setLooping(Boolean(args.loop));
       return {

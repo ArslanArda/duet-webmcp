@@ -2,11 +2,19 @@ export const TICKS_PER_BEAT = 480;
 export const BEATS_PER_BAR = 4;
 export const TICKS_PER_BAR = TICKS_PER_BEAT * BEATS_PER_BAR;
 export const PROJECT_BARS = 16;
+/** Shortest note the editor will create or keep: a sixteenth. */
+export const MIN_NOTE_TICKS = TICKS_PER_BEAT / 4;
 
 export type NoteSource = "human" | "agent";
 export type TrackId = "melody" | "bass" | "chords";
-export type EditorMode = "draw" | "select" | "erase";
+export type EditorMode = "draw" | "erase";
 export type Locale = "en" | "tr";
+export type Quantize = 8 | 16;
+
+export const TRACK_IDS: TrackId[] = ["melody", "bass", "chords"];
+export const MODES = ["major", "minor", "dorian", "phrygian", "lydian", "mixolydian", "locrian"] as const;
+export type Mode = (typeof MODES)[number];
+export const KEY_CENTERS = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"] as const;
 
 export interface Note {
   id: string;
@@ -70,6 +78,12 @@ export interface AgentChangeInput {
   explanation: string;
   affectedBars: { startBar: number; endBar: number };
   nextProject: Project;
+}
+
+/** One step of the global undo history: the project and the AI change log move together. */
+export interface HistoryEntry {
+  project: Project;
+  changeLog: Change[];
 }
 
 export interface ToolSuccess {

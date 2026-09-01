@@ -1,5 +1,5 @@
 import type { ChordSlot, Note, Project } from "../types";
-import { TICKS_PER_BAR, TICKS_PER_BEAT } from "../types";
+import { PROJECT_BARS, TICKS_PER_BAR, TICKS_PER_BEAT } from "../types";
 import { voiceChord } from "../music/voicing";
 
 const progression = [
@@ -45,8 +45,12 @@ export function createDemoProject(): Project {
     tempo: 100,
     keyCenter: "C",
     mode: "minor",
-    barCount: 16,
+    barCount: PROJECT_BARS,
     notes: [...chordNotes, ...melody],
     chords,
   };
+}
+
+export function createEmptyProject(): Project {
+  return { tempo: 100, keyCenter: "C", mode: "major", barCount: PROJECT_BARS, notes: [], chords: [] };
 }

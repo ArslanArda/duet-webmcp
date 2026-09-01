@@ -1,48 +1,61 @@
-import { Bot, Eraser, MousePointer2, Pencil, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  playProject,
-  releasePreviewNotes,
-  startPreviewNote,
-  stopPlayback,
-  stopPreviewNote,
-  unlockAudio,
-} from "./audio/player";
-import { ChangeLog } from "./components/ChangeLog";
-import { ChordTrack } from "./components/ChordTrack";
-import { Header } from "./components/Header";
-import { Onboarding } from "./components/Onboarding";
+import { Bot, Eraser, Minus, Pencil, Plus, Scan, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { playProject, stopPlayback, unlockAudio } from "./audio/player";
+import { AiPanel } from "./components/AiPanel";
+import { AppHeader } from "./components/AppHeader";
+import { BarRuler } from "./components/BarRuler";
+import { ChordStrip } from "./components/ChordStrip";
+import { EditorLayoutContext, KEY_GUTTER, MAX_BAR_WIDTH, MIN_BAR_WIDTH } from "./components/editorLayout";
+import { HelpDialog } from "./components/HelpDialog";
 import { PianoRoll } from "./components/PianoRoll";
-import { Transport } from "./components/Transport";
+import { TransportBar } from "./components/TransportBar";
+import { WelcomeCard } from "./components/WelcomeCard";
 import { t } from "./i18n";
+import { useRecorder } from "./input/useRecorder";
 import { connectMidi, disconnectMidi } from "./midi/input";
-import { quantizeTick } from "./music/theory";
+import { exportProjectMidi } from "./midi/export";
 import { useProjectStore } from "./store/projectStore";
-import { TICKS_PER_BEAT, type TrackId } from "./types";
+import { PROJECT_BARS, TRACK_IDS } from "./types";
 import { registerWebMCPTools } from "./webmcp/registerTools";
 
 const COMPUTER_KEYS: Record<string, number> = {
   a: 60,
+  w: 61,
   s: 62,
+  e: 63,
   d: 64,
   f: 65,
+  t: 66,
   g: 67,
+  y: 68,
   h: 69,
+  u: 70,
   j: 71,
   k: 72,
+  o: 73,
   l: 74,
+  p: 75,
+};
+
+const isTypingTarget = (target: EventTarget | null) => {
+  const element = target as HTMLElement | null;
+  return Boolean(
+    element && (["INPUT", "SELECT", "TEXTAREA"].includes(element.tagName) || element.isContentEditable),
+  );
 };
 
 function App() {
   const state = useProjectStore();
-  const { selection, locale, activeTrack, editorMode, setActiveTrack, setEditorMode } = state;
+  const { project, selection, locale, activeTrack, editorMode, setActiveTrack, setEditorMode, setSelection } =
+    state;
   const [siteToolsReady, setSiteToolsReady] = useState(false);
-  const [soundReady, setSoundReady] = useState(false);
-  const openMidiNotes = useRef(new Map<string, { timestamp: number; velocity: number; trackId: TrackId }>());
-  const activeComputerNotes = useRef(new Map<string, { pitch: number; trackId: TrackId }>());
-  const recordStart = useRef(0);
-  const recordedIds = useRef<string[]>([]);
-  const keyboardCursor = useRef(0);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [howToOpen, setHowToOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [zoom, setZoom] = useState<number | "fit">("fit");
+  const [fitWidth, setFitWidth] = useState(112);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const recorder = useRecorder();
 
   useEffect(() => {
     let cleanup: () => void = () => {};
@@ -59,257 +72,355 @@ function App() {
     },
     [],
   );
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
 
-  const enableSound = useCallback(async () => setSoundReady(await unlockAudio()), []);
-  const releaseComputerNotes = useCallback(() => {
-    activeComputerNotes.current.clear();
-    releasePreviewNotes();
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (!node) return;
+    const measure = () =>
+      setFitWidth(
+        Math.max(
+          MIN_BAR_WIDTH,
+          Math.min(MAX_BAR_WIDTH, Math.floor((node.clientWidth - KEY_GUTTER - 2) / PROJECT_BARS)),
+        ),
+      );
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
   }, []);
-  const handlePlay = useCallback(async () => {
-    if (!soundReady) await enableSound();
+  const barWidth = zoom === "fit" ? fitWidth : zoom;
+  const layout = useMemo(() => ({ barWidth, gridWidth: barWidth * PROJECT_BARS }), [barWidth]);
+  const zoomBy = (factor: number) =>
+    setZoom(Math.max(MIN_BAR_WIDTH, Math.min(MAX_BAR_WIDTH, Math.round(barWidth * factor))));
+
+  const announce = useCallback((message: string) => useProjectStore.getState().setAnnouncement(message), []);
+
+  const stop = useCallback(() => {
     const current = useProjectStore.getState();
-    const range = current.selection ?? { startBar: 0, endBar: current.project.barCount };
-    if (playProject(current.project, range.startBar, range.endBar, current.isLooping))
-      current.setPlaying(true);
-  }, [enableSound, soundReady]);
-  const handleStop = useCallback(() => {
-    activeComputerNotes.current.clear();
-    stopPlayback();
-    useProjectStore.getState().setPlaying(false);
-  }, []);
-  const handleLoopChange = useCallback((isLooping: boolean) => {
-    const current = useProjectStore.getState();
-    current.setLooping(isLooping);
-    if (!current.isPlaying) return;
-    const range = current.selection ?? { startBar: 0, endBar: current.project.barCount };
-    if (playProject(current.project, range.startBar, range.endBar, isLooping)) current.setPlaying(true);
-  }, []);
-  const stopRecording = useCallback(() => {
-    const current = useProjectStore.getState();
-    recordedIds.current.forEach((id) => {
-      const note = current.project.notes.find((item) => item.id === id);
-      if (note)
-        current.updateHumanNote(id, {
-          startTick: quantizeTick(note.startTick, current.quantize),
-          durationTicks: Math.max(30, quantizeTick(note.durationTicks, current.quantize)),
-        });
-    });
-    recordedIds.current = [];
-    openMidiNotes.current.clear();
-    releasePreviewNotes();
-    current.setRecording(false);
-  }, []);
-  const handleRecord = useCallback(async () => {
-    const current = useProjectStore.getState();
-    if (current.isRecording) {
-      stopRecording();
-      return;
+    if (current.isRecording) recorder.stopRecording();
+    else {
+      stopPlayback();
+      current.setPlaying(false);
     }
-    await enableSound();
-    recordStart.current = performance.now();
-    recordedIds.current = [];
-    current.setRecording(true);
-  }, [enableSound, stopRecording]);
+  }, [recorder]);
+
+  const play = useCallback(async () => {
+    const current = useProjectStore.getState();
+    if (current.isRecording) recorder.stopRecording();
+    if (!(await unlockAudio())) return;
+    const range = current.selection ?? { startBar: 0, endBar: current.project.barCount };
+    const started = playProject(current.project, range.startBar, range.endBar, {
+      loop: current.isLooping,
+      onEnded: () => useProjectStore.getState().setPlaying(false),
+    });
+    if (started) {
+      current.setPlaying(true);
+      current.completeOnboarding(0);
+    }
+  }, [recorder]);
+
+  const togglePlay = useCallback(() => {
+    if (useProjectStore.getState().isPlaying) stop();
+    else void play();
+  }, [play, stop]);
+
+  const handleLoopChange = useCallback(
+    (isLooping: boolean) => {
+      const current = useProjectStore.getState();
+      current.setLooping(isLooping);
+      if (current.isPlaying && !current.isRecording) void play();
+    },
+    [play],
+  );
+
+  const handleUndo = useCallback(() => {
+    const current = useProjectStore.getState();
+    announce(current.undo() ? t(current.locale, "undone") : t(current.locale, "nothingToUndo"));
+  }, [announce]);
+  const handleRedo = useCallback(() => {
+    const current = useProjectStore.getState();
+    if (current.redo()) announce(t(current.locale, "redone"));
+  }, [announce]);
+
+  const copyPrompt = useCallback(
+    async (text: string) => {
+      await navigator.clipboard.writeText(text);
+      const current = useProjectStore.getState();
+      current.completeOnboarding(2);
+      announce(t(current.locale, "copied"));
+    },
+    [announce],
+  );
+
+  const showAiInfo = useCallback(() => {
+    setHowToOpen(true);
+    setPanelOpen(true);
+    document.getElementById("ai-panel")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, []);
 
   const handleConnectMidi = useCallback(async () => {
     try {
       await connectMidi({
         onStatus: (device, supported) => useProjectStore.getState().setMidiStatus(supported, device),
-        onNoteOn: (pitch, velocity, timestamp, channel) => {
-          const trackId = useProjectStore.getState().activeTrack;
-          const key = `${channel}:${pitch}`;
-          openMidiNotes.current.set(key, { timestamp, velocity, trackId });
-          void startPreviewNote({ pitch, velocity, trackId }).then(() => {
-            if (!openMidiNotes.current.has(key)) stopPreviewNote({ pitch, trackId });
-          });
-        },
-        onNoteOff: (pitch, timestamp, channel) => {
-          const key = `${channel}:${pitch}`;
-          const opened = openMidiNotes.current.get(key);
-          openMidiNotes.current.delete(key);
-          if (opened) stopPreviewNote({ pitch, trackId: opened.trackId });
-          const current = useProjectStore.getState();
-          if (!opened || !current.isRecording) return;
-          const offset = (current.selection?.startBar ?? 0) * 4 * TICKS_PER_BEAT;
-          const startTick =
-            offset +
-            Math.max(
-              0,
-              ((opened.timestamp - recordStart.current) / 60000) * current.project.tempo * TICKS_PER_BEAT,
-            );
-          const durationTicks = Math.max(
-            30,
-            ((timestamp - opened.timestamp) / 60000) * current.project.tempo * TICKS_PER_BEAT,
-          );
-          const id = current.addHumanNote({
-            trackId: opened.trackId,
-            pitch,
-            startTick: Math.round(startTick),
-            durationTicks: Math.round(durationTicks),
-            velocity: opened.velocity,
-          });
-          recordedIds.current.push(id);
-        },
+        onNoteOn: (pitch, velocity, timestamp, channel) =>
+          recorder.noteOn(`midi:${channel}:${pitch}`, pitch, velocity, timestamp),
+        onNoteOff: (pitch, timestamp, channel) => recorder.noteOff(`midi:${channel}:${pitch}`, timestamp),
       });
     } catch {
       useProjectStore.getState().setMidiStatus(true, null);
-      useProjectStore.getState().setAnnouncement(t(locale, "midiUnavailable"));
+      announce(t(useProjectStore.getState().locale, "midiUnavailable"));
     }
-  }, [locale]);
+  }, [recorder, announce]);
 
   useEffect(() => {
-    const isTypingTarget = (target: EventTarget | null) =>
-      ["INPUT", "SELECT", "TEXTAREA"].includes((target as HTMLElement)?.tagName);
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.repeat || event.metaKey || event.ctrlKey || event.altKey || isTypingTarget(event.target))
-        return;
-      if (event.code === "Space") {
+      if (event.defaultPrevented || isTypingTarget(event.target)) return;
+      const meta = event.metaKey || event.ctrlKey;
+      const key = event.key.toLowerCase();
+      if (meta && key === "z") {
         event.preventDefault();
-        void handlePlay();
+        if (event.shiftKey) handleRedo();
+        else handleUndo();
         return;
       }
-      if (event.code === "Delete" || event.code === "Backspace") {
+      if (meta && key === "y") {
+        event.preventDefault();
+        handleRedo();
+        return;
+      }
+      if (meta || event.altKey) return;
+      if (event.code === "Space") {
+        event.preventDefault();
+        togglePlay();
+        return;
+      }
+      if (event.key === "Escape") {
+        useProjectStore.getState().setSelection(null);
+        return;
+      }
+      if (event.key === "Delete" || event.key === "Backspace") {
         const current = useProjectStore.getState();
         if (current.selection) {
           event.preventDefault();
-          current.clearRange(current.selection);
+          current.deleteInRange(current.selection);
         }
         return;
       }
-      const key = event.key.toLowerCase();
       const pitch = COMPUTER_KEYS[key];
-      if (pitch === undefined || activeComputerNotes.current.has(key)) return;
+      if (pitch === undefined || event.repeat) return;
       event.preventDefault();
-      const current = useProjectStore.getState();
-      const trackId = current.activeTrack;
-      activeComputerNotes.current.set(key, { pitch, trackId });
-      void startPreviewNote({ pitch, velocity: 86, trackId }).then(() => {
-        if (!activeComputerNotes.current.has(key)) stopPreviewNote({ pitch, trackId });
-      });
-      const base = (current.selection?.startBar ?? 0) * 4 * TICKS_PER_BEAT;
-      current.addHumanNote({
-        trackId,
-        pitch,
-        startTick: base + keyboardCursor.current,
-        durationTicks: TICKS_PER_BEAT / 2,
-        velocity: 86,
-      });
-      keyboardCursor.current = (keyboardCursor.current + TICKS_PER_BEAT / 2) % (4 * TICKS_PER_BEAT);
+      recorder.noteOn(`key:${key}`, pitch, 86, event.timeStamp);
     };
     const onKeyUp = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
-      const opened = activeComputerNotes.current.get(key);
-      if (!opened) return;
-      event.preventDefault();
-      activeComputerNotes.current.delete(key);
-      stopPreviewNote(opened);
+      if (COMPUTER_KEYS[key] === undefined) return;
+      recorder.noteOff(`key:${key}`, event.timeStamp);
     };
-    const onVisibilityChange = () => {
-      if (document.hidden) releaseComputerNotes();
+    const release = () => recorder.releaseAll();
+    const onVisibility = () => {
+      if (document.hidden) release();
     };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
-    window.addEventListener("blur", releaseComputerNotes);
-    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("blur", release);
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
-      window.removeEventListener("blur", releaseComputerNotes);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      releaseComputerNotes();
+      window.removeEventListener("blur", release);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [handlePlay, releaseComputerNotes]);
+  }, [handleRedo, handleUndo, recorder, togglePlay]);
 
-  const tools = [
-    { id: "draw" as const, icon: Pencil, label: t(locale, "draw") },
-    { id: "select" as const, icon: MousePointer2, label: t(locale, "select") },
-    { id: "erase" as const, icon: Eraser, label: t(locale, "erase") },
-  ];
-  const tracks = ["melody", "bass", "chords"] as const;
+  const trackCounts = useMemo(
+    () =>
+      Object.fromEntries(
+        TRACK_IDS.map((track) => [track, project.notes.filter((note) => note.trackId === track).length]),
+      ),
+    [project.notes],
+  );
+
   return (
-    <main className="app-shell">
-      <Header
+    <main className={`app-shell ${panelOpen ? "panel-open" : ""}`}>
+      <AppHeader
         siteToolsReady={siteToolsReady}
         onConnectMidi={handleConnectMidi}
-        onHelp={() => state.resetOnboarding()}
+        onHelp={() => setHelpOpen(true)}
+        onAiInfo={showAiInfo}
       />
-      <Onboarding />
       <div className="workspace">
-        <section className="editor-panel">
-          <div className="editor-toolbar">
-            <div className="segmented">
-              {tools.map(({ id, icon: Icon, label }) => (
-                <button
-                  key={id}
-                  className={editorMode === id ? "active" : ""}
-                  onClick={() => setEditorMode(id)}
-                >
-                  <Icon size={14} />
-                  {label}
-                </button>
-              ))}
+        <section className="editor">
+          <WelcomeCard
+            siteToolsReady={siteToolsReady}
+            onPlay={() => void play()}
+            onCopyPrompt={() => void copyPrompt(t(locale, "promptChords", { start: 1, end: 4 }))}
+            onAiInfo={showAiInfo}
+          />
+
+          <div className="editor-head">
+            <div
+              className="segmented"
+              role="radiogroup"
+              aria-label={`${t(locale, "draw")} / ${t(locale, "erase")}`}
+            >
+              <button
+                type="button"
+                role="radio"
+                aria-checked={editorMode === "draw"}
+                className={editorMode === "draw" ? "active" : ""}
+                onClick={() => setEditorMode("draw")}
+                title={t(locale, "drawHint")}
+              >
+                <Pencil size={14} />
+                {t(locale, "draw")}
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={editorMode === "erase"}
+                className={editorMode === "erase" ? "active" : ""}
+                onClick={() => setEditorMode("erase")}
+                title={t(locale, "eraseHint")}
+              >
+                <Eraser size={14} />
+                {t(locale, "erase")}
+              </button>
             </div>
-            <div className="track-tabs">
-              {tracks.map((track) => (
+
+            <div className="track-tabs" role="tablist">
+              {TRACK_IDS.map((track) => (
                 <button
+                  type="button"
+                  role="tab"
                   key={track}
+                  aria-selected={activeTrack === track}
                   className={activeTrack === track ? "active" : ""}
                   onClick={() => setActiveTrack(track)}
                 >
-                  {t(locale, track)}
+                  <b>{t(locale, track)}</b>
+                  <small>{t(locale, "trackNotes", { count: trackCounts[track] })}</small>
                 </button>
               ))}
             </div>
-            <div className="legend">
+
+            <div className="zoom-controls">
+              <button
+                type="button"
+                className="icon-button"
+                onClick={() => zoomBy(1 / 1.25)}
+                aria-label={t(locale, "zoomOut")}
+                title={t(locale, "zoomOut")}
+              >
+                <Minus size={15} />
+              </button>
+              <button
+                type="button"
+                className={`icon-button ${zoom === "fit" ? "active" : ""}`}
+                onClick={() => setZoom("fit")}
+                aria-label={t(locale, "fitAll")}
+                title={t(locale, "fitAll")}
+              >
+                <Scan size={15} />
+              </button>
+              <button
+                type="button"
+                className="icon-button"
+                onClick={() => zoomBy(1.25)}
+                aria-label={t(locale, "zoomIn")}
+                title={t(locale, "zoomIn")}
+              >
+                <Plus size={15} />
+              </button>
+            </div>
+
+            <div className="legend" aria-hidden="true">
               <span>
-                <i className="human-dot" />
-                {t(locale, "you")}
+                <i className="dot human" /> {t(locale, "you")}
               </span>
               <span>
-                <i className="agent-dot" />
-                {t(locale, "ai")}
+                <i className="dot agent" /> {t(locale, "ai")}
+              </span>
+              <span>
+                <i className="dot ghost" /> {t(locale, "ghost")}
               </span>
             </div>
           </div>
-          <div className="selection-summary">
-            <span>
-              {selection
-                ? `${t(locale, "selected")}: ${t(locale, selection.trackId)} · ${selection.startBar + 1}–${selection.endBar}`
-                : t(locale, "noSelection")}
-            </span>
+
+          <div className="selection-bar">
             {selection ? (
-              <button className="selection-clear" onClick={() => state.clearRange(selection)}>
-                <Trash2 size={12} />
-                {t(locale, "clearSelection")}
-              </button>
+              <>
+                <span className="selection-text">
+                  {t(locale, "selectedBars", {
+                    start: selection.startBar + 1,
+                    end: selection.endBar,
+                    track: t(locale, selection.trackId),
+                  })}
+                </span>
+                <button type="button" className="button small" onClick={() => setSelection(null)}>
+                  <X size={13} /> {t(locale, "deselect")}
+                </button>
+              </>
             ) : (
-              <span className="keyboard-hint">A S D F G H J K L</span>
+              <span className="hint">
+                {editorMode === "draw" ? t(locale, "drawHint") : t(locale, "eraseHint")} ·{" "}
+                {t(locale, "selectionHint")}
+              </span>
             )}
           </div>
-          <div className="editor-scroll">
-            <div className="editor-content">
-              <ChordTrack />
-              <PianoRoll />
+
+          <EditorLayoutContext.Provider value={layout}>
+            <div className="grid-scroll" ref={scrollRef}>
+              <div className="grid-content" style={{ width: KEY_GUTTER + layout.gridWidth }}>
+                <div className="grid-row ruler-row">
+                  <div className="corner" aria-hidden="true" />
+                  <BarRuler />
+                </div>
+                <div className="grid-row chord-row">
+                  <div className="corner">{t(locale, "chords")}</div>
+                  <ChordStrip />
+                </div>
+                <PianoRoll />
+              </div>
             </div>
-          </div>
-          <Transport
-            soundReady={soundReady}
-            onEnableSound={enableSound}
-            onPlay={handlePlay}
-            onStop={handleStop}
-            onRecord={handleRecord}
+          </EditorLayoutContext.Provider>
+
+          <TransportBar
+            onTogglePlay={togglePlay}
             onLoopChange={handleLoopChange}
+            onRecord={() => void recorder.toggleRecording()}
+            onUndo={handleUndo}
+            onRedo={handleRedo}
+            onExport={() => exportProjectMidi(project)}
+            onConnectMidi={handleConnectMidi}
           />
         </section>
-        <ChangeLog />
+
+        <AiPanel
+          siteToolsReady={siteToolsReady}
+          howToOpen={howToOpen}
+          onToggleHowTo={() => setHowToOpen((open) => !open)}
+          onCopy={copyPrompt}
+          onClose={() => setPanelOpen(false)}
+        />
       </div>
+
+      <button
+        type="button"
+        className="ai-fab"
+        onClick={() => setPanelOpen((open) => !open)}
+        aria-expanded={panelOpen}
+      >
+        <Bot size={16} />
+        <span>{t(locale, "openAi")}</span>
+        {state.changeLog.length ? <b>{state.changeLog.length}</b> : null}
+      </button>
       <div className="sr-only" aria-live="polite">
         {state.announcement}
       </div>
-      <div className="mobile-agent-badge">
-        <Bot size={14} />
-        {state.changeLog.length}
-      </div>
+      <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
     </main>
   );
 }
