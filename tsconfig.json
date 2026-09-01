@@ -1,0 +1,36 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "baseUrl": ".",
+    "paths": {
+      "tone": ["src/vendor-types/tone.d.ts"],
+      "@tonaljs/tonal": ["src/vendor-types/tonal.d.ts"],
+      "@tonejs/midi": ["src/vendor-types/tone-midi.d.ts"],
+      "lucide-react": ["src/vendor-types/lucide-react.d.ts"],
+      "nanoid": ["src/vendor-types/nanoid.d.ts"],
+      "zustand": ["src/vendor-types/zustand.d.ts"],
+      "zustand/middleware": ["src/vendor-types/zustand-middleware.d.ts"],
+      "react": ["src/vendor-types/react.d.ts"],
+      "react/jsx-runtime": ["src/vendor-types/react-jsx-runtime.d.ts"],
+      "react-dom/client": ["src/vendor-types/react-dom-client.d.ts"],
+      "vitest": ["src/vendor-types/vitest.d.ts"],
+      "@testing-library/jest-dom/vitest": ["src/vendor-types/jest-dom-vitest.d.ts"]
+    },
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "incremental": true,
+    "tsBuildInfoFile": ".cache/tsconfig.tsbuildinfo",
+    "noEmit": true,
+    "jsx": "react-jsx"
+  },
+  "include": ["src"]
+}
