@@ -53,7 +53,9 @@ The instrumentation lives in `src/webmcp/activity.ts`; `registerTools.ts` wraps 
 - **Chords in plain language.** Click a chord cell to open the chord picker: chords that fit the key, a root + type grid with a one-line mood for each type (“Minor 7 · warm, smooth jazz”), and an expert field for typing symbols.
 - **Key, mood and tempo** are picked with words next to the technical names (“C · Sad, serious (Minor)”, “Medium · 100”).
 - **Nothing is destructive.** Every edit, including AI edits, is in one undo history (⌘/Ctrl+Z, Shift+Z). The AI panel additionally offers per-change undo.
-- **Record** counts in four beats, plays the range with a click, and captures what you play on the computer keys (A–L, black keys on W E T Y U O P) or a MIDI keyboard; timing snaps to the grid when you stop.
+- **Play a keyboard.** A Casio (or any class-compliant MIDI keyboard over USB) and the computer keys (A–L, black keys on W E T Y U O P) share one path. Outside recording they only make sound; the pressed key lights up in the key gutter and the header shows keyboard activity, so "is it connected?" never comes up.
+- **Record** into the active track (the button says which one). A big on-screen 4-3-2-1 count-in with a click, then the range plays and every note you hold grows on the grid in real time. With **Loop** on, the selected bars keep cycling and each pass layers on top (or clears the range first, from the More menu). On the Chords track, keys pressed together are named as a chord in the chord strip.
+- **After a take** a card shows what landed with three quick reactions: tight/loose timing, delete the take, or "Ask the AI to tidy it", which copies a ready-made request. Timing snaps to the grid when you stop; the whole take is one undo step.
 - English and Turkish are built in and picked from the browser language.
 
 ## Local development

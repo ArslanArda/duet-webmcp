@@ -49,6 +49,9 @@ export function TransportBar({
     midiSupported,
     midiDevice,
     deleteInRange,
+    activeTrack,
+    recordMode,
+    setRecordMode,
   } = useProjectStore();
   const [moreOpen, setMoreOpen] = useState(false);
   const clock = useRef<HTMLSpanElement | null>(null);
@@ -107,6 +110,7 @@ export function TransportBar({
       >
         <Circle size={11} fill="currentColor" />
         <span>{isRecording ? t(locale, "recording") : t(locale, "record")}</span>
+        <span className="record-target">{t(locale, "recordTarget", { track: t(locale, activeTrack) })}</span>
       </button>
 
       <span className="divider" />
@@ -179,6 +183,20 @@ export function TransportBar({
             ))}
           </div>
           <p className="hint">{t(locale, "timingHint")}</p>
+          <p className="field-label">{t(locale, "recordMode")}</p>
+          <div className="chip-grid">
+            {(["layer", "replace"] as const).map((value) => (
+              <button
+                type="button"
+                key={value}
+                className={`chip ${recordMode === value ? "active" : ""}`}
+                onClick={() => setRecordMode(value)}
+              >
+                {t(locale, value === "layer" ? "recordLayer" : "recordReplace")}
+              </button>
+            ))}
+          </div>
+          <p className="hint">{t(locale, "recordModeHint")}</p>
           <button
             type="button"
             className="menu-item"

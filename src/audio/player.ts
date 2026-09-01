@@ -133,6 +133,8 @@ export interface PlayOptions {
   countInBeats?: number;
   /** Click on every beat of the range while it plays. */
   metronome?: boolean;
+  /** Fired on the UI thread on each count-in beat with the beats remaining (4, 3, 2, 1). */
+  onCountInBeat?: (remaining: number) => void;
   /** Fired on the UI thread when the count-in is over and the range actually starts. */
   onRangeStart?: () => void;
   /** Fired on the UI thread when a non-looping run reaches the end of the range. */
@@ -183,7 +185,15 @@ export function playProject(
     const metronome = getClick();
     const tick = (accent: boolean) => (time: number) =>
       metronome.triggerAttackRelease(accent ? 1760 : 1175, 0.03, time, accent ? 0.9 : 0.5);
-    for (let beat = 0; beat < countIn; beat += 1) transport.schedule(tick(beat === 0), beat * beatSeconds);
+    const onCountInBeat = options.onCountInBeat;
+    for (let beat = 0; beat < countIn; beat += 1) {
+      const click = tick(beat === 0);
+      const remaining = countIn - beat;
+      transport.schedule((time) => {
+        click(time);
+        if (onCountInBeat) draw.schedule(() => onCountInBeat(remaining), time);
+      }, beat * beatSeconds);
+    }
     if (options.metronome) {
       const beatsInRange = (rangeEnd - rangeStart) / TICKS_PER_BEAT;
       for (let beat = 0; beat < beatsInRange; beat += 1) {
@@ -221,4 +231,27 @@ export function playProject(
   startPlayheadLoop();
   if (onRangeStart && offset === 0) onRangeStart();
   return true;
+}
+
+/** While loop-recording, make a just-recorded note audible on every following pass. */
+export function scheduleLoopNote(note: Note) {
+  if (!activeRun || !activeRun.loop) return;
+  const { rangeStartTick, rangeTicks, offsetSeconds, tempo } = activeRun;
+  const rangeSeconds = secondsForTicks(rangeTicks, tempo);
+  const firstPass = offsetSeconds + secondsForTicks(note.startTick - rangeStartTick, tempo);
+  const transport = Tone.getTransport();
+  const passes = Math.max(1, Math.ceil((transport.seconds - firstPass) / rangeSeconds + 1e-6));
+  const clippedTicks = Math.min(note.durationTicks, rangeStartTick + rangeTicks - note.startTick);
+  const duration = secondsForTicks(clippedTicks, tempo);
+  transport.scheduleRepeat(
+    (time) =>
+      getSynths()[note.trackId].triggerAttackRelease(
+        toFrequency(note.pitch),
+        duration,
+        time,
+        note.velocity / 127,
+      ),
+    rangeSeconds,
+    firstPass + passes * rangeSeconds,
+  );
 }

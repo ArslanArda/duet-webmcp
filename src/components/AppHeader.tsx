@@ -9,7 +9,8 @@ import {
   PlugZap,
   Sparkles,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useLiveInput } from "../input/liveInput";
 import { previewPitches } from "../audio/player";
 import { t, type TranslationKey } from "../i18n";
 import { MODE_MOODS, ROOT_LABELS, tempoWord, TEMPO_PRESETS } from "../music/chordCatalog";
@@ -42,6 +43,14 @@ export function AppHeader({ siteToolsReady, onConnectMidi, onHelp, onAiInfo }: A
   } = useProjectStore();
   const [menu, setMenu] = useState<Menu>(null);
   const busy = useActivityStore(isAgentBusy);
+  const midiPulse = useLiveInput((state) => state.midiPulse);
+  const [midiLit, setMidiLit] = useState(false);
+  useEffect(() => {
+    if (!midiPulse) return;
+    setMidiLit(true);
+    const timer = setTimeout(() => setMidiLit(false), 140);
+    return () => clearTimeout(timer);
+  }, [midiPulse]);
   const [confirm, setConfirm] = useState<"new" | "demo" | null>(null);
   const close = () => setMenu(null);
   const toggle = (name: Menu) => setMenu((current) => (current === name ? null : name));
@@ -226,12 +235,13 @@ export function AppHeader({ siteToolsReady, onConnectMidi, onHelp, onAiInfo }: A
         {midiSupported ? (
           <button
             type="button"
-            className={`button midi-button ${midiDevice ? "ready" : ""}`}
+            className={`button midi-button ${midiDevice ? "ready" : ""} ${midiLit ? "lit" : ""}`}
             onClick={onConnectMidi}
             title={midiDevice ? t(locale, "midiConnected", { device: midiDevice }) : t(locale, "connectMidi")}
           >
             <Piano size={15} />
             <span>{midiDevice ?? t(locale, "connectMidi")}</span>
+            {midiDevice ? <i className="midi-led" aria-label={t(locale, "midiLive")} /> : null}
           </button>
         ) : null}
 

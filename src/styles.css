@@ -1463,6 +1463,164 @@ button.step:hover {
   border-color: var(--line-strong);
 }
 
+/* ---------- recording ---------- */
+.grid-area {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.grid-area > .grid-scroll {
+  flex: 1;
+}
+.record-target {
+  color: var(--text-3);
+  font-weight: 500;
+}
+.record-button.recording .record-target {
+  color: inherit;
+  opacity: 0.8;
+}
+.track-tabs button.rec::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fb7185;
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  animation: blink 1s ease-in-out infinite;
+}
+.track-tabs button {
+  position: relative;
+}
+@keyframes blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+.midi-led {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(108, 224, 170, 0.35);
+  transition:
+    background 0.1s ease,
+    box-shadow 0.1s ease;
+}
+.midi-button.lit .midi-led {
+  background: var(--ok);
+  box-shadow: 0 0 8px var(--ok);
+}
+.count-in {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  pointer-events: none;
+  background: radial-gradient(circle at center, rgba(10, 13, 18, 0.7), rgba(10, 13, 18, 0.15) 70%);
+}
+.count-in-number {
+  font-size: 96px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fb7185;
+  text-shadow: 0 0 30px rgba(251, 113, 133, 0.5);
+  animation: countPop 0.5s ease-out;
+}
+@keyframes countPop {
+  from {
+    transform: scale(1.4);
+    opacity: 0.2;
+  }
+}
+.count-in-label {
+  font-size: var(--fs-3);
+  font-weight: 600;
+  color: var(--text);
+  background: rgba(10, 13, 18, 0.85);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 6px 14px;
+}
+.recording-tag {
+  position: absolute;
+  top: calc(var(--ruler-h) + var(--chord-h) + 10px);
+  right: 12px;
+  z-index: 9;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(251, 113, 133, 0.45);
+  background: rgba(30, 12, 16, 0.9);
+  color: #fb7185;
+  font-size: var(--fs-1);
+  font-weight: 600;
+  pointer-events: none;
+}
+.recording-tag svg {
+  animation: blink 1s ease-in-out infinite;
+}
+.take-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border-top: 1px solid rgba(105, 214, 232, 0.25);
+  background: #0f1720;
+}
+.take-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: var(--human);
+  background: var(--human-soft);
+  flex: none;
+}
+.take-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  line-height: 1.3;
+}
+.take-text b {
+  font-size: var(--fs-2);
+  font-weight: 600;
+}
+.take-text small {
+  font-size: 11px;
+  color: var(--text-3);
+}
+.take-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.take-actions .chip {
+  flex-direction: row;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+}
+.chip.danger {
+  color: #f1a3a3;
+}
+.chip.danger:hover {
+  border-color: rgba(248, 113, 113, 0.4);
+  background: var(--danger-soft);
+}
+
 /* ---------- chord picker ---------- */
 .chord-picker {
   position: fixed;
@@ -1604,7 +1762,8 @@ button.step:hover {
   .legend {
     display: none;
   }
-  .hide-sm {
+  .hide-sm,
+  .record-target {
     display: none;
   }
   .clock {

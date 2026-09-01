@@ -7,6 +7,8 @@ import { AiPanel } from "./components/AiPanel";
 import { AppHeader } from "./components/AppHeader";
 import { BarRuler } from "./components/BarRuler";
 import { ChordStrip } from "./components/ChordStrip";
+import { CountInOverlay } from "./components/CountInOverlay";
+import { TakeCard } from "./components/TakeCard";
 import { EditorLayoutContext, KEY_GUTTER, MAX_BAR_WIDTH, MIN_BAR_WIDTH } from "./components/editorLayout";
 import { HelpDialog } from "./components/HelpDialog";
 import { PianoRoll } from "./components/PianoRoll";
@@ -14,6 +16,7 @@ import { TransportBar } from "./components/TransportBar";
 import { WelcomeCard } from "./components/WelcomeCard";
 import { t } from "./i18n";
 import { useRecorder } from "./input/useRecorder";
+import { liveInput } from "./input/liveInput";
 import { connectMidi, disconnectMidi } from "./midi/input";
 import { exportProjectMidi } from "./midi/export";
 import { useProjectStore } from "./store/projectStore";
@@ -178,9 +181,14 @@ function App() {
     try {
       await connectMidi({
         onStatus: (device, supported) => useProjectStore.getState().setMidiStatus(supported, device),
-        onNoteOn: (pitch, velocity, timestamp, channel) =>
-          recorder.noteOn(`midi:${channel}:${pitch}`, pitch, velocity, timestamp),
-        onNoteOff: (pitch, timestamp, channel) => recorder.noteOff(`midi:${channel}:${pitch}`, timestamp),
+        onNoteOn: (pitch, velocity, timestamp, channel) => {
+          liveInput.getState().pulse();
+          recorder.noteOn(`midi:${channel}:${pitch}`, pitch, velocity, timestamp);
+        },
+        onNoteOff: (pitch, timestamp, channel) => {
+          liveInput.getState().pulse();
+          recorder.noteOff(`midi:${channel}:${pitch}`, timestamp);
+        },
       });
     } catch {
       useProjectStore.getState().setMidiStatus(true, null);
@@ -310,7 +318,7 @@ function App() {
                   role="tab"
                   key={track}
                   aria-selected={activeTrack === track}
-                  className={activeTrack === track ? "active" : ""}
+                  className={`${activeTrack === track ? "active" : ""} ${activeTrack === track && state.isRecording ? "rec" : ""}`}
                   onClick={() => setActiveTrack(track)}
                 >
                   <b>{t(locale, track)}</b>
@@ -391,21 +399,33 @@ function App() {
           </div>
 
           <EditorLayoutContext.Provider value={layout}>
-            <div className="grid-scroll" ref={scrollRef}>
-              <div className="grid-content" style={{ width: KEY_GUTTER + layout.gridWidth }}>
-                <div className="grid-row ruler-row">
-                  <div className="corner" aria-hidden="true" />
-                  <BarRuler />
+            <div className="grid-area">
+              <CountInOverlay />
+              <div className="grid-scroll" ref={scrollRef}>
+                <div className="grid-content" style={{ width: KEY_GUTTER + layout.gridWidth }}>
+                  <div className="grid-row ruler-row">
+                    <div className="corner" aria-hidden="true" />
+                    <BarRuler />
+                  </div>
+                  <div className="grid-row chord-row">
+                    <div className="corner">{t(locale, "chords")}</div>
+                    <ChordStrip />
+                  </div>
+                  <PianoRoll />
                 </div>
-                <div className="grid-row chord-row">
-                  <div className="corner">{t(locale, "chords")}</div>
-                  <ChordStrip />
-                </div>
-                <PianoRoll />
+                <AgentToast />
               </div>
-              <AgentToast />
             </div>
           </EditorLayoutContext.Provider>
+
+          <TakeCard
+            onRequantize={recorder.requantizeTake}
+            onDelete={recorder.deleteTake}
+            onAskAi={(prompt) => {
+              void copyPrompt(prompt);
+              setPanelOpen(true);
+            }}
+          />
 
           <AiActivityBar siteToolsReady={siteToolsReady} onOpen={() => setPanelOpen(true)} />
 

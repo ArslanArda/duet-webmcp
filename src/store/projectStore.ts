@@ -84,6 +84,8 @@ export interface ProjectState {
   isLooping: boolean;
   isRecording: boolean;
   quantize: Quantize;
+  /** Loop recording: add each pass on top, or clear the range first. */
+  recordMode: "layer" | "replace";
   midiDevice: string | null;
   midiSupported: boolean;
   announcement: string;
@@ -115,6 +117,10 @@ export interface ProjectState {
   setLooping: (value: boolean) => void;
   setRecording: (value: boolean) => void;
   setQuantize: (value: Quantize) => void;
+  setRecordMode: (value: "layer" | "replace") => void;
+  /** Change only the chord symbol of a bar (keeps the recorded chord-track notes). */
+  setChordSymbol: (bar: number, symbol: string, options?: HistoryOptions) => void;
+  removeNotes: (ids: string[]) => void;
   setMidiStatus: (supported: boolean, device: string | null) => void;
   completeOnboarding: (index: 0 | 1 | 2) => void;
   resetOnboarding: () => void;
@@ -181,6 +187,7 @@ export const useProjectStore = create<ProjectState>()(
         isLooping: false,
         isRecording: false,
         quantize: 16,
+        recordMode: "layer",
         midiDevice: null,
         midiSupported: typeof navigator !== "undefined" && "requestMIDIAccess" in navigator,
         announcement: "",
@@ -376,6 +383,29 @@ export const useProjectStore = create<ProjectState>()(
         setLooping: (isLooping) => set({ isLooping }),
         setRecording: (isRecording) => set({ isRecording }),
         setQuantize: (quantize) => set({ quantize }),
+        setRecordMode: (recordMode) => set({ recordMode }),
+        setChordSymbol: (bar, symbol, options = { history: false }) =>
+          set((state) =>
+            apply(
+              state,
+              {
+                ...state.project,
+                chords: [
+                  ...state.project.chords.filter((slot) => slot.bar !== bar),
+                  { bar, symbol, source: "human" as const },
+                ].sort((a, b) => a.bar - b.bar),
+              },
+              options,
+            ),
+          ),
+        removeNotes: (ids) =>
+          set((state) => {
+            const remove = new Set(ids);
+            return apply(state, {
+              ...state.project,
+              notes: state.project.notes.filter((note) => !remove.has(note.id)),
+            });
+          }),
         setMidiStatus: (midiSupported, midiDevice) => set({ midiSupported, midiDevice }),
         completeOnboarding: (index) =>
           set((state) => ({
@@ -408,6 +438,7 @@ export const useProjectStore = create<ProjectState>()(
         onboarding: state.onboarding,
         guideDismissed: state.guideDismissed,
         quantize: state.quantize,
+        recordMode: state.recordMode,
         activeTrack: state.activeTrack,
       }),
     },

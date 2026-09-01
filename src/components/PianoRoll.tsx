@@ -5,6 +5,8 @@ import { t } from "../i18n";
 import { midiToPitchName, scaleChromas } from "../music/theory";
 import { useProjectStore } from "../store/projectStore";
 import { FLASH_MS, useActivityStore } from "../webmcp/activity";
+import { useLiveInput } from "../input/liveInput";
+import { getPlayheadTick } from "../audio/playhead";
 import { MIN_NOTE_TICKS, PROJECT_BARS, TICKS_PER_BAR, TICKS_PER_BEAT, type Note } from "../types";
 import {
   HIGH_PITCH,
@@ -69,10 +71,17 @@ export function PianoRoll() {
   const keysRef = useRef<HTMLCanvasElement | null>(null);
   const drag = useRef<Drag | null>(null);
   const hover = useRef<Hover | null>(null);
-  const playheadTick = useRef<number | null>(null);
+  const playheadTick = useRef<number | null>(getPlayheadTick());
   const overlayFrame = useRef(0);
   const flash = useActivityStore((state) => state.flash);
   const flashRef = useRef(flash);
+  const held = useLiveInput((state) => state.held);
+  const recordingRange = useLiveInput((state) => state.recording);
+  const heldRef = useRef(held);
+  const recordingRef = useRef(recordingRange);
+  heldRef.current = held;
+  recordingRef.current = recordingRange;
+  const heldPitchKey = held.map((note) => note.pitch).join(",");
 
   const snap = barWidth >= 112 ? TICKS_PER_BEAT / 4 : TICKS_PER_BEAT / 2;
   const tickPerPx = TICKS_PER_BAR / barWidth;
@@ -218,9 +227,26 @@ export function PianoRoll() {
         ctx.fillText(midiToPitchName(pitch), KEY_GUTTER - 6, y + ROW_HEIGHT / 2 + 0.5);
       }
     }
+    const heldPitches = new Set(heldRef.current.map((note) => note.pitch));
+    heldPitches.forEach((pitch) => {
+      if (pitch < LOW_PITCH || pitch > HIGH_PITCH) return;
+      const y = pitchToY(pitch);
+      const black = BLACK_KEYS.has(pitch % 12);
+      ctx.fillStyle = "rgba(105,214,232,.85)";
+      ctx.fillRect(0, y, black ? KEY_GUTTER * 0.62 : KEY_GUTTER, ROW_HEIGHT);
+      ctx.fillStyle = "#0a0d12";
+      ctx.font = "600 11px ui-monospace, SFMono-Regular, Menlo, monospace";
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      ctx.fillText(
+        midiToPitchName(pitch),
+        (black ? KEY_GUTTER * 0.62 : KEY_GUTTER) - 6,
+        y + ROW_HEIGHT / 2 + 0.5,
+      );
+    });
     ctx.fillStyle = "#334050";
     ctx.fillRect(KEY_GUTTER - 1, 0, 1, ROLL_HEIGHT);
-  }, []);
+  }, [heldPitchKey]);
 
   const drawOverlayRef = useRef<() => void>(() => {});
   const drawOverlay = useCallback(() => {
@@ -261,6 +287,23 @@ export function PianoRoll() {
       }
     }
     const tick = playheadTick.current;
+    const rec = recordingRef.current;
+    if (rec && tick !== null) {
+      heldRef.current.forEach((note) => {
+        if (note.startTick === null || note.trackId !== activeTrack) return;
+        const end = tick >= note.startTick ? tick : rec.endTick;
+        const x = xForTick(note.startTick);
+        const w = Math.max(4, xForTick(end - note.startTick));
+        const y = pitchToY(note.pitch);
+        ctx.fillStyle = `rgba(251,113,133,${0.45 + (note.velocity / 127) * 0.45})`;
+        ctx.strokeStyle = "#fecdd3";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(x + 1, y + 1, w - 2, ROW_HEIGHT - 2, 3);
+        ctx.fill();
+        ctx.stroke();
+      });
+    }
     if (tick !== null) {
       const x = Math.round(xForTick(tick)) + 0.5;
       ctx.fillStyle = "rgba(255,255,255,.06)";
@@ -272,12 +315,16 @@ export function PianoRoll() {
       ctx.lineTo(x, ROLL_HEIGHT);
       ctx.stroke();
     }
-  }, [gridWidth, editorMode, xForTick]);
+  }, [gridWidth, editorMode, xForTick, activeTrack]);
 
   drawOverlayRef.current = drawOverlay;
   const scheduleOverlay = useCallback(() => {
     if (!overlayFrame.current) overlayFrame.current = requestAnimationFrame(drawOverlay);
   }, [drawOverlay]);
+
+  useEffect(() => {
+    scheduleOverlay();
+  }, [held, scheduleOverlay]);
 
   useEffect(() => {
     flashRef.current = flash;
