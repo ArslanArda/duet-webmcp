@@ -32,7 +32,12 @@ export function TakeCard({ onRequantize, onDelete, onAskAi }: TakeCardProps) {
           })}
         </b>
         {take.chordsDetected ? (
-          <small>{t(locale, "takeChords", { count: take.chordsDetected })}</small>
+          <small>
+            {t(locale, "takeChords", {
+              count: take.chordsDetected,
+              chords: t(locale, take.chordsDetected === 1 ? "chordWord_one" : "chordWord_many"),
+            })}
+          </small>
         ) : null}
       </span>
       <span className="take-actions">
