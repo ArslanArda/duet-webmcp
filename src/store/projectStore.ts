@@ -9,6 +9,7 @@ import type {
   InversePatch,
   Locale,
   Note,
+  NoteSource,
   Project,
   Quantize,
   Selection,
@@ -67,6 +68,8 @@ interface HistoryOptions {
 export interface ProjectState {
   project: Project;
   selection: Selection | null;
+  /** Who made the current selection; agent selections are drawn in amber. */
+  selectionSource: NoteSource;
   changeLog: Change[];
   stateVersion: number;
   past: HistoryEntry[];
@@ -85,7 +88,7 @@ export interface ProjectState {
   midiSupported: boolean;
   announcement: string;
 
-  setSelection: (selection: Selection | null) => void;
+  setSelection: (selection: Selection | null, source?: NoteSource) => void;
   setActiveTrack: (trackId: TrackId) => void;
   setEditorMode: (mode: EditorMode) => void;
   setLocale: (locale: Locale) => void;
@@ -164,6 +167,7 @@ export const useProjectStore = create<ProjectState>()(
       return {
         project: createDemoProject(),
         selection: null,
+        selectionSource: "human",
         changeLog: [],
         stateVersion: 1,
         past: [],
@@ -181,7 +185,8 @@ export const useProjectStore = create<ProjectState>()(
         midiSupported: typeof navigator !== "undefined" && "requestMIDIAccess" in navigator,
         announcement: "",
 
-        setSelection: (selection) => set((state) => ({ selection, stateVersion: state.stateVersion + 1 })),
+        setSelection: (selection, source = "human") =>
+          set((state) => ({ selection, selectionSource: source, stateVersion: state.stateVersion + 1 })),
         setActiveTrack: (activeTrack) =>
           set((state) => ({
             activeTrack,

@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { useEffect, useReducer, useState } from "react";
 import { formatRelativeTime, t } from "../i18n";
+import { isAgentBusy, useActivityStore } from "../webmcp/activity";
+import { AiActivityFeed } from "./AiActivityFeed";
 import { useProjectStore } from "../store/projectStore";
 
 interface AiPanelProps {
@@ -25,6 +27,8 @@ interface AiPanelProps {
 export function AiPanel({ siteToolsReady, howToOpen, onToggleHowTo, onCopy, onClose }: AiPanelProps) {
   const { locale, changeLog, selection, undoChange, setSelection, setAnnouncement, activeTrack } =
     useProjectStore();
+  const busy = useActivityStore(isAgentBusy);
+  const hasActivity = useActivityStore((state) => state.activities.length > 0);
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [, tick] = useReducer((value: number) => value + 1, 0);
   useEffect(() => {
@@ -53,9 +57,13 @@ export function AiPanel({ siteToolsReady, howToOpen, onToggleHowTo, onCopy, onCl
           <h2>
             <Sparkles size={16} className="agent-color" /> {t(locale, "aiPanelTitle")}
           </h2>
-          <span className={`status-pill ${siteToolsReady ? "ready" : ""}`}>
+          <span className={`status-pill ${siteToolsReady ? "ready" : ""} ${busy ? "busy" : ""}`}>
             {siteToolsReady ? <Bot size={13} /> : <PlugZap size={13} />}
-            {siteToolsReady ? t(locale, "aiConnected") : t(locale, "aiNotHere")}
+            {busy
+              ? t(locale, "aiWorking")
+              : siteToolsReady
+                ? t(locale, "aiConnected")
+                : t(locale, "aiNotHere")}
           </span>
         </div>
         <button
@@ -100,6 +108,13 @@ export function AiPanel({ siteToolsReady, howToOpen, onToggleHowTo, onCopy, onCl
             </ol>
           ) : null}
         </div>
+      ) : null}
+
+      {siteToolsReady || hasActivity ? (
+        <section className="activity-section">
+          <p className="field-label">{t(locale, "activityTitle")}</p>
+          <AiActivityFeed />
+        </section>
       ) : null}
 
       <section className="prompt-box">

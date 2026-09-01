@@ -4,6 +4,7 @@ import { previewNote } from "../audio/player";
 import { t } from "../i18n";
 import { midiToPitchName, scaleChromas } from "../music/theory";
 import { useProjectStore } from "../store/projectStore";
+import { FLASH_MS, useActivityStore } from "../webmcp/activity";
 import { MIN_NOTE_TICKS, PROJECT_BARS, TICKS_PER_BAR, TICKS_PER_BEAT, type Note } from "../types";
 import {
   HIGH_PITCH,
@@ -52,6 +53,7 @@ export function PianoRoll() {
   const {
     project,
     selection,
+    selectionSource,
     activeTrack,
     editorMode,
     locale,
@@ -69,6 +71,8 @@ export function PianoRoll() {
   const hover = useRef<Hover | null>(null);
   const playheadTick = useRef<number | null>(null);
   const overlayFrame = useRef(0);
+  const flash = useActivityStore((state) => state.flash);
+  const flashRef = useRef(flash);
 
   const snap = barWidth >= 112 ? TICKS_PER_BEAT / 4 : TICKS_PER_BEAT / 2;
   const tickPerPx = TICKS_PER_BAR / barWidth;
@@ -157,9 +161,10 @@ export function PianoRoll() {
     if (selection) {
       const x = xForTick(selection.startBar * TICKS_PER_BAR);
       const w = xForTick((selection.endBar - selection.startBar) * TICKS_PER_BAR);
-      ctx.fillStyle = "rgba(105,214,232,.08)";
+      const agent = selectionSource === "agent";
+      ctx.fillStyle = agent ? "rgba(244,168,82,.09)" : "rgba(105,214,232,.08)";
       ctx.fillRect(x, 0, w, ROLL_HEIGHT);
-      ctx.strokeStyle = "rgba(105,214,232,.55)";
+      ctx.strokeStyle = agent ? "rgba(244,168,82,.65)" : "rgba(105,214,232,.55)";
       ctx.lineWidth = 1;
       ctx.strokeRect(x + 0.5, 0.5, w - 1, ROLL_HEIGHT - 1);
     }
@@ -187,7 +192,7 @@ export function PianoRoll() {
         ctx.fillRect(r.x + r.w - EDGE_HANDLE - 1, r.y + 4, 2, r.h - 8);
       }
     });
-  }, [gridWidth, barWidth, chromas, selection, ghostNotes, trackNotes, noteRect, xForTick]);
+  }, [gridWidth, barWidth, chromas, selection, selectionSource, ghostNotes, trackNotes, noteRect, xForTick]);
 
   useEffect(() => {
     const canvas = keysRef.current;
@@ -217,6 +222,7 @@ export function PianoRoll() {
     ctx.fillRect(KEY_GUTTER - 1, 0, 1, ROLL_HEIGHT);
   }, []);
 
+  const drawOverlayRef = useRef<() => void>(() => {});
   const drawOverlay = useCallback(() => {
     overlayFrame.current = 0;
     const canvas = overlayRef.current;
@@ -238,6 +244,22 @@ export function PianoRoll() {
       ctx.textBaseline = "bottom";
       ctx.fillText(midiToPitchName(h.pitch), x + 4, y - 2 < 12 ? y + ROW_HEIGHT + 12 : y - 2);
     }
+    const currentFlash = flashRef.current;
+    if (currentFlash) {
+      const remaining = currentFlash.until - Date.now();
+      if (remaining > 0) {
+        const alpha = Math.min(1, remaining / FLASH_MS);
+        const x = xForTick(currentFlash.startBar * TICKS_PER_BAR);
+        const w = xForTick((currentFlash.endBar - currentFlash.startBar) * TICKS_PER_BAR);
+        ctx.fillStyle = `rgba(244,168,82,${0.22 * alpha})`;
+        ctx.fillRect(x, 0, w, ROLL_HEIGHT);
+        ctx.strokeStyle = `rgba(244,168,82,${0.9 * alpha})`;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x + 1, 1, w - 2, ROLL_HEIGHT - 2);
+        overlayFrame.current = requestAnimationFrame(drawOverlayRef.current);
+        return;
+      }
+    }
     const tick = playheadTick.current;
     if (tick !== null) {
       const x = Math.round(xForTick(tick)) + 0.5;
@@ -252,9 +274,22 @@ export function PianoRoll() {
     }
   }, [gridWidth, editorMode, xForTick]);
 
+  drawOverlayRef.current = drawOverlay;
   const scheduleOverlay = useCallback(() => {
     if (!overlayFrame.current) overlayFrame.current = requestAnimationFrame(drawOverlay);
   }, [drawOverlay]);
+
+  useEffect(() => {
+    flashRef.current = flash;
+    if (!flash) return;
+    scheduleOverlay();
+    const scroller = overlayRef.current?.closest<HTMLElement>(".grid-scroll");
+    if (scroller) {
+      const x = KEY_GUTTER + xForTick(flash.startBar * TICKS_PER_BAR);
+      if (x < scroller.scrollLeft + KEY_GUTTER || x > scroller.scrollLeft + scroller.clientWidth - 48)
+        scroller.scrollTo({ left: Math.max(0, x - KEY_GUTTER - 24), behavior: "smooth" });
+    }
+  }, [flash, scheduleOverlay, xForTick]);
 
   useEffect(() => {
     const canvas = overlayRef.current;

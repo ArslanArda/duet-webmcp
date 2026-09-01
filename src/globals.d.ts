@@ -23,12 +23,16 @@ interface WebMCPTool {
   description: string;
   inputSchema: Record<string, unknown>;
   annotations?: { readOnlyHint?: boolean };
-  execute: (args: Record<string, unknown>) => Promise<unknown> | unknown;
+  /** The second argument is the W3C draft's agent handle; ChatGPT passes only args. */
+  execute: (args: Record<string, unknown>, agent?: unknown) => Promise<unknown> | unknown;
 }
 interface ModelContext {
   registerTool(tool: WebMCPTool): Promise<unknown>;
   unregisterTool?(name: string): Promise<void> | void;
 }
 interface Document {
+  modelContext?: ModelContext;
+}
+interface Navigator {
   modelContext?: ModelContext;
 }

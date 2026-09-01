@@ -1,6 +1,8 @@
 import { Bot, Eraser, Minus, Pencil, Plus, Scan, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { playProject, stopPlayback, unlockAudio } from "./audio/player";
+import { AgentToast } from "./components/AgentToast";
+import { AiActivityBar } from "./components/AiActivityBar";
 import { AiPanel } from "./components/AiPanel";
 import { AppHeader } from "./components/AppHeader";
 import { BarRuler } from "./components/BarRuler";
@@ -16,6 +18,7 @@ import { connectMidi, disconnectMidi } from "./midi/input";
 import { exportProjectMidi } from "./midi/export";
 import { useProjectStore } from "./store/projectStore";
 import { PROJECT_BARS, TRACK_IDS } from "./types";
+import { useActivityStore } from "./webmcp/activity";
 import { registerWebMCPTools } from "./webmcp/registerTools";
 
 const COMPUTER_KEYS: Record<string, number> = {
@@ -46,8 +49,17 @@ const isTypingTarget = (target: EventTarget | null) => {
 
 function App() {
   const state = useProjectStore();
-  const { project, selection, locale, activeTrack, editorMode, setActiveTrack, setEditorMode, setSelection } =
-    state;
+  const {
+    project,
+    selection,
+    selectionSource,
+    locale,
+    activeTrack,
+    editorMode,
+    setActiveTrack,
+    setEditorMode,
+    setSelection,
+  } = state;
   const [siteToolsReady, setSiteToolsReady] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [howToOpen, setHowToOpen] = useState(false);
@@ -56,6 +68,7 @@ function App() {
   const [fitWidth, setFitWidth] = useState(112);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const recorder = useRecorder();
+  const hasActivity = useActivityStore((store) => store.activities.length > 0);
 
   useEffect(() => {
     let cleanup: () => void = () => {};
@@ -352,7 +365,8 @@ function App() {
           <div className="selection-bar">
             {selection ? (
               <>
-                <span className="selection-text">
+                <span className={`selection-text ${selectionSource === "agent" ? "agent" : ""}`}>
+                  {selectionSource === "agent" ? `${t(locale, "selectedByAgent")} · ` : ""}
                   {t(locale, "selectedBars", {
                     start: selection.startBar + 1,
                     end: selection.endBar,
@@ -365,8 +379,13 @@ function App() {
               </>
             ) : (
               <span className="hint">
-                {editorMode === "draw" ? t(locale, "drawHint") : t(locale, "eraseHint")} ·{" "}
-                {t(locale, "selectionHint")}
+                <span className="hint-long">
+                  {editorMode === "draw" ? t(locale, "drawHint") : t(locale, "eraseHint")} ·{" "}
+                  {t(locale, "selectionHint")}
+                </span>
+                <span className="hint-short">
+                  {editorMode === "draw" ? t(locale, "drawHintShort") : t(locale, "eraseHintShort")}
+                </span>
               </span>
             )}
           </div>
@@ -384,8 +403,11 @@ function App() {
                 </div>
                 <PianoRoll />
               </div>
+              <AgentToast />
             </div>
           </EditorLayoutContext.Provider>
+
+          <AiActivityBar siteToolsReady={siteToolsReady} onOpen={() => setPanelOpen(true)} />
 
           <TransportBar
             onTogglePlay={togglePlay}
@@ -407,16 +429,18 @@ function App() {
         />
       </div>
 
-      <button
-        type="button"
-        className="ai-fab"
-        onClick={() => setPanelOpen((open) => !open)}
-        aria-expanded={panelOpen}
-      >
-        <Bot size={16} />
-        <span>{t(locale, "openAi")}</span>
-        {state.changeLog.length ? <b>{state.changeLog.length}</b> : null}
-      </button>
+      {siteToolsReady || hasActivity ? null : (
+        <button
+          type="button"
+          className="ai-fab"
+          onClick={() => setPanelOpen((open) => !open)}
+          aria-expanded={panelOpen}
+        >
+          <Bot size={16} />
+          <span>{t(locale, "openAi")}</span>
+          {state.changeLog.length ? <b>{state.changeLog.length}</b> : null}
+        </button>
+      )}
       <div className="sr-only" aria-live="polite">
         {state.announcement}
       </div>

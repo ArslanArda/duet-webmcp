@@ -8,7 +8,7 @@ import { useEditorLayout } from "./editorLayout";
 /** Bar numbers across the top of the grid. Dragging here selects bars. */
 export function BarRuler() {
   const { barWidth, gridWidth } = useEditorLayout();
-  const { locale, selection, activeTrack, setSelection } = useProjectStore();
+  const { locale, selection, selectionSource, activeTrack, setSelection } = useProjectStore();
   const [preview, setPreview] = useState<{ startBar: number; endBar: number } | null>(null);
   const drag = useRef<number | null>(null);
   const marker = useRef<HTMLDivElement | null>(null);
@@ -75,7 +75,7 @@ export function BarRuler() {
       {Array.from({ length: PROJECT_BARS }, (_, bar) => (
         <div
           key={bar}
-          className={`ruler-cell ${shown && bar >= shown.startBar && bar < shown.endBar ? "selected" : ""} ${bar % 4 === 0 ? "strong" : ""}`}
+          className={`ruler-cell ${shown && bar >= shown.startBar && bar < shown.endBar ? "selected" : ""} ${!preview && selectionSource === "agent" ? "agent" : ""} ${bar % 4 === 0 ? "strong" : ""}`}
           style={{ width: barWidth }}
         >
           {bar + 1}

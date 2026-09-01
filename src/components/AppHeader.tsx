@@ -18,6 +18,7 @@ import { useProjectStore } from "../store/projectStore";
 import { KEY_CENTERS, MODES, type Mode } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Popover } from "./Popover";
+import { isAgentBusy, useActivityStore } from "../webmcp/activity";
 
 interface AppHeaderProps {
   siteToolsReady: boolean;
@@ -40,6 +41,7 @@ export function AppHeader({ siteToolsReady, onConnectMidi, onHelp, onAiInfo }: A
     loadDemoProject,
   } = useProjectStore();
   const [menu, setMenu] = useState<Menu>(null);
+  const busy = useActivityStore(isAgentBusy);
   const [confirm, setConfirm] = useState<"new" | "demo" | null>(null);
   const close = () => setMenu(null);
   const toggle = (name: Menu) => setMenu((current) => (current === name ? null : name));
@@ -235,12 +237,18 @@ export function AppHeader({ siteToolsReady, onConnectMidi, onHelp, onAiInfo }: A
 
         <button
           type="button"
-          className={`button ai-status ${siteToolsReady ? "ready" : ""}`}
+          className={`button ai-status ${siteToolsReady ? "ready" : ""} ${busy ? "busy" : ""}`}
           onClick={onAiInfo}
           title={siteToolsReady ? t(locale, "aiConnected") : t(locale, "howToConnect")}
         >
           {siteToolsReady ? <Sparkles size={15} /> : <PlugZap size={15} />}
-          <span>{siteToolsReady ? t(locale, "aiConnected") : t(locale, "aiNotHere")}</span>
+          <span>
+            {busy
+              ? t(locale, "aiWorking")
+              : siteToolsReady
+                ? t(locale, "aiConnected")
+                : t(locale, "aiNotHere")}
+          </span>
           {!siteToolsReady ? <Bot size={14} className="muted" /> : null}
         </button>
 

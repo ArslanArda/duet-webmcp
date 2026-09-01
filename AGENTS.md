@@ -23,6 +23,8 @@
 - Playback position is published through `src/audio/playhead.ts`, not the store: subscribe to it from canvases and clocks instead of re-rendering React on every frame.
 - Music copy is layered: technical symbols stay exact (tonal decides validity); plain-language labels and moods live in `src/music/chordCatalog.ts`.
 - Live note input (computer keys and MIDI) shares one path in `src/input/useRecorder.ts`; outside recording it only previews sound.
+- WebMCP tools are registered through `instrumentTool()` (`src/webmcp/activity.ts`) so every call, including rejected ones, shows up in the activity feed, the header status, the grid flash and the toast. Register new tools in `tools.ts` only; add a `TOOL_KINDS` entry and `actRun_/actDone_` strings for them.
+- To exercise tools without ChatGPT, open the dev server with `?mockAgent` and call `window.__duetTools.<name>.execute(args)`.
 
 ## Layout
 

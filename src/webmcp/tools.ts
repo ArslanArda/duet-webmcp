@@ -216,7 +216,7 @@ export const webMCPTools: WebMCPTool[] = [
           "Use melody, bass, or chords.",
         );
       projectStore.getState().setActiveTrack(args.trackId as TrackId);
-      projectStore.getState().setSelection({ trackId: args.trackId as TrackId, ...range });
+      projectStore.getState().setSelection({ trackId: args.trackId as TrackId, ...range }, "agent");
       return {
         ok: true,
         stateVersion: projectStore.getState().stateVersion,

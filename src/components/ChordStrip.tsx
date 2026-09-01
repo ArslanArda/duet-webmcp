@@ -9,7 +9,8 @@ import { useEditorLayout } from "./editorLayout";
 
 export function ChordStrip() {
   const { barWidth, gridWidth } = useEditorLayout();
-  const { project, locale, editorMode, selection, activeTrack, clearHumanChord } = useProjectStore();
+  const { project, locale, editorMode, selection, selectionSource, activeTrack, clearHumanChord } =
+    useProjectStore();
   const [editing, setEditing] = useState<{ bar: number; anchor: DOMRect } | null>(null);
 
   return (
@@ -22,6 +23,7 @@ export function ChordStrip() {
           "chord-cell",
           inSelection ? "selected" : "",
           inSelection && activeTrack === "chords" ? "selected-strong" : "",
+          inSelection && selectionSource === "agent" ? "agent-selected" : "",
           slot?.source === "agent" ? "agent" : "",
           editing?.bar === bar ? "editing" : "",
         ].join(" ");

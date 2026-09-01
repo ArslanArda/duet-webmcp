@@ -12,6 +12,18 @@ Duet is a local-first, responsive piano-roll editor where a person and ChatGPT/C
 
 The page registers tools directly through `document.modelContext.registerTool`. An agent can read the current project and visible selection, apply a deterministic musical operation, and immediately verify the updated state on the same page. Agent-authored notes are amber, every persistent edit has a plain-language explanation, and each edit has its own one-click Undo. No MCP server, API key, account, or backend is required.
 
+## What the person sees when the agent acts
+
+WebMCP itself only carries tool calls; ChatGPT shows them in its own **Site tools → Recently used** list, outside the page. Duet mirrors that activity inside the page so the person never wonders what just happened:
+
+- **Live activity feed** in the AI panel: every tool call, read or write, appears as it runs ("Reading the project overview…", "Focused on Bass, bars 5–8", "Wrote a bass line in bars 5–8"), including calls Duet rejected and the hint the agent received — so self-correction is visible.
+- **Amber everywhere the agent touched**: notes and chords written by the agent, the selection when the agent set it (ruler, chord strip, grid), and a short flash over the bars a write just changed.
+- **Toast over the grid** for each write, with the plain-language reason, "Show bars" and "Undo this".
+- **Status pills** in the header and the panel switch to "AI is working…" while a tool runs.
+- **Narrow layouts** (the ChatGPT browser sits beside the chat) dock the latest action above the transport; "Details" opens the full panel.
+
+The instrumentation lives in `src/webmcp/activity.ts`; `registerTools.ts` wraps every tool with it and accepts both `document.modelContext` (ChatGPT) and `navigator.modelContext` (the W3C draft). In development, `?mockAgent` installs a fake model context so tools can be exercised from the console via `window.__duetTools`.
+
 ## Site tools
 
 | Tool | Type | Purpose |
