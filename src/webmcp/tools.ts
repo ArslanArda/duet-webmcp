@@ -15,9 +15,24 @@ import {
   remapPitchToMode,
 } from "../music/theory";
 import { voiceChord } from "../music/voicing";
+import { answerPhrase, type AnswerStyle } from "../music/answer";
+import { MOOD_LABELS, MOODS, suggestProgressions, type Mood } from "../music/progressions";
+import { DEFAULT_INSTRUMENTS } from "../audio/player";
+import { liveInput } from "../input/liveInput";
+import { useActivityStore } from "./activity";
 import { projectStore, validTrackIds } from "../store/projectStore";
-import type { Locale, Note, Project, ToolFailure, ToolSuccess, TrackId } from "../types";
-import { PROJECT_BARS, TICKS_PER_BAR, TICKS_PER_BEAT } from "../types";
+import type {
+  Draft,
+  InstrumentId,
+  Locale,
+  Note,
+  Project,
+  Section,
+  ToolFailure,
+  ToolSuccess,
+  TrackId,
+} from "../types";
+import { INSTRUMENTS, PROJECT_BARS, TICKS_PER_BAR, TICKS_PER_BEAT } from "../types";
 
 const objectSchema = (properties: Record<string, unknown>, required: string[] = []) => ({
   type: "object",
@@ -80,6 +95,85 @@ function commit(
   return resultFromChange(id);
 }
 
+const MODE_SCHEMA = {
+  type: "string",
+  enum: ["draft", "apply"],
+  description:
+    "draft (default): show the result as a ghost preview the person accepts or discards on the page; apply: write immediately because the person explicitly asked for that.",
+};
+const VERSION_SCHEMA = {
+  type: "integer",
+  minimum: 0,
+  description:
+    "Optional stateVersion you last read; the call is rejected if the person changed the page since.",
+};
+
+function staleCheck(expected: unknown): ToolFailure | null {
+  if (expected === undefined || expected === null) return null;
+  const current = projectStore.getState().stateVersion;
+  if (expected === current) return null;
+  return failure(
+    "STALE_STATE",
+    `The page changed since state version ${String(expected)} (now ${current}).`,
+    "Call get_recent_activity to see what the person did, then retry with the current stateVersion.",
+  );
+}
+
+const modeOf = (value: unknown, fallback: "draft" | "apply" = "draft") =>
+  value === "apply" || value === "draft" ? value : fallback;
+
+interface DraftResult {
+  ok: true;
+  draft: true;
+  stateVersion: number;
+  draftId: string;
+  label: string;
+  summary: string;
+  explanation: string;
+  affectedBars: { startBar: number; endBar: number };
+  pendingDrafts: Array<{ id: string; label: string }>;
+  hint: string;
+}
+
+function commitOrDraft(
+  mode: "draft" | "apply",
+  nextProject: Project,
+  toolName: string,
+  summary: string,
+  explanation: string,
+  affectedBars: { startBar: number; endBar: number },
+  label: string,
+  id = nanoid(),
+): ToolSuccess | DraftResult {
+  if (mode === "apply") return commit(nextProject, toolName, summary, explanation, affectedBars, id);
+  const draft: Draft = {
+    id,
+    label,
+    toolName,
+    summary,
+    explanation,
+    affectedBars,
+    nextProject,
+    createdAt: Date.now(),
+  };
+  projectStore.getState().addDraft(draft);
+  const state = projectStore.getState();
+  return {
+    ok: true,
+    draft: true,
+    stateVersion: state.stateVersion,
+    draftId: id,
+    label,
+    summary,
+    explanation,
+    affectedBars,
+    pendingDrafts: state.drafts.map((item) => ({ id: item.id, label: item.label })),
+    hint: "The person now sees this as a ghost preview with Listen / Accept / Discard. Nothing is written yet. Ask what they think, or call resolve_draft when they decide.",
+  };
+}
+
+const barsLabel = (range: { startBar: number; endBar: number }) => `${range.startBar + 1}–${range.endBar}`;
+
 function agentNote(draft: Omit<Note, "id" | "source" | "changeId">, changeId: string): Note {
   return { ...draft, id: nanoid(), source: "agent", changeId };
 }
@@ -98,6 +192,7 @@ export const webMCPTools: WebMCPTool[] = [
     execute: () => {
       const state = projectStore.getState();
       const project = state.project;
+      const live = liveInput.getState();
       const notesSummary = Object.fromEntries(
         validTrackIds.map((trackId) => {
           const notes = project.notes.filter((note) => note.trackId === trackId);
@@ -132,6 +227,31 @@ export const webMCPTools: WebMCPTool[] = [
         selection: state.selection,
         notesSummary,
         chords: project.chords,
+        sections: project.sections ?? [],
+        instruments: { ...DEFAULT_INSTRUMENTS, ...(project.instruments ?? {}) },
+        ui: {
+          activeTrack: state.activeTrack,
+          selectionSource: state.selectionSource,
+          isPlaying: state.isPlaying,
+          isLooping: state.isLooping,
+          isRecording: state.isRecording,
+          visibleBars: live.visibleBars,
+          pendingDrafts: state.drafts.map((draft) => ({
+            id: draft.id,
+            label: draft.label,
+            affectedBars: draft.affectedBars,
+          })),
+          lastTake: live.lastTake
+            ? {
+                trackId: live.lastTake.trackId,
+                startBar: live.lastTake.startBar,
+                endBar: live.lastTake.endBar,
+                noteCount: live.lastTake.ids.length,
+                chordsDetected: live.lastTake.chordsDetected,
+              }
+            : null,
+          canUndo: state.past.length > 0,
+        },
       };
     },
   },
@@ -239,10 +359,14 @@ export const webMCPTools: WebMCPTool[] = [
           items: { type: "string", minLength: 1, maxLength: 16 },
         },
         voicing: enumValue(["block", "arpeggio"]),
+        mode: MODE_SCHEMA,
+        expectedStateVersion: VERSION_SCHEMA,
       },
       ["startBar", "chords"],
     ),
     execute: (args) => {
+      const stale = staleCheck(args.expectedStateVersion);
+      if (stale) return stale;
       const chords = args.chords as string[];
       const startBar = args.startBar as number;
       const endBar = startBar + chords.length;
@@ -294,7 +418,16 @@ export const webMCPTools: WebMCPTool[] = [
         `The progression ${chords.join(" – ")} was voiced inside a comfortable keyboard range so every symbol is visible and audible.`,
         `${chords.join(" – ")} progresyonu, her akor hem görünür hem duyulur olacak şekilde rahat bir klavye aralığında seslendirildi.`,
       );
-      return commit(nextProject, "set_chord_progression", summary, explanation, range, id);
+      return commitOrDraft(
+        modeOf(args.mode),
+        nextProject,
+        "set_chord_progression",
+        summary,
+        explanation,
+        range,
+        chords.join(" – "),
+        id,
+      );
     },
   },
   {
@@ -318,10 +451,14 @@ export const webMCPTools: WebMCPTool[] = [
             ["pitchName", "startBeat", "durationBeats"],
           ),
         },
+        mode: MODE_SCHEMA,
+        expectedStateVersion: VERSION_SCHEMA,
       },
       ["trackId", "notes"],
     ),
     execute: (args) => {
+      const stale = staleCheck(args.expectedStateVersion);
+      if (stale) return stale;
       const trackId = args.trackId as TrackId;
       if (!validTrackIds.includes(trackId))
         return failure(
@@ -388,7 +525,16 @@ export const webMCPTools: WebMCPTool[] = [
         `${chordToneCount} added notes align directly with the local chord material; all timing and pitches were validated before insertion.`,
         `Eklenen notaların ${chordToneCount} tanesi doğrudan mevcut akor malzemesiyle eşleşiyor; tüm zaman ve ses değerleri eklenmeden önce doğrulandı.`,
       );
-      return commit(nextProject, "add_notes", summary, explanation, { startBar, endBar }, id);
+      return commitOrDraft(
+        modeOf(args.mode),
+        nextProject,
+        "add_notes",
+        summary,
+        explanation,
+        { startBar, endBar },
+        `${created.length} notes → ${trackId}`,
+        id,
+      );
     },
   },
   {
@@ -400,10 +546,14 @@ export const webMCPTools: WebMCPTool[] = [
         operation: enumValue(["transpose", "change_mode", "quantize", "humanize"]),
         amount: number(-24, 60),
         targetMode: enumValue(["major", "minor", "dorian", "phrygian", "lydian", "mixolydian", "locrian"]),
+        mode: MODE_SCHEMA,
+        expectedStateVersion: VERSION_SCHEMA,
       },
       ["operation"],
     ),
     execute: (args) => {
+      const stale = staleCheck(args.expectedStateVersion);
+      if (stale) return stale;
       const state = projectStore.getState();
       const selection = state.selection;
       if (!selection)
@@ -499,12 +649,14 @@ export const webMCPTools: WebMCPTool[] = [
               `The ${operation} operation used a bounded, repeatable rule, so the result can be reproduced and undone exactly.`,
               `${operation} işlemi sınırlı ve tekrarlanabilir bir kuralla uygulandı; sonuç birebir yeniden üretilebilir ve geri alınabilir.`,
             );
-      return commit(
+      return commitOrDraft(
+        modeOf(args.mode),
         nextProject,
         "transform_selection",
         summary,
         explanation,
         { startBar: selection.startBar, endBar: selection.endBar },
+        operation === "change_mode" ? `→ ${targetMode}` : `${operation} ${amount}`,
         id,
       );
     },
@@ -519,10 +671,14 @@ export const webMCPTools: WebMCPTool[] = [
         startBar: integer(0, 15),
         endBar: integer(1, 16),
         style: enumValue(["simple", "flowing", "syncopated"]),
+        mode: MODE_SCHEMA,
+        expectedStateVersion: VERSION_SCHEMA,
       },
       ["role", "startBar", "endBar"],
     ),
     execute: (args) => {
+      const stale = staleCheck(args.expectedStateVersion);
+      if (stale) return stale;
       const range = barRange(args.startBar, args.endBar);
       if ("ok" in range) return range;
       const state = projectStore.getState();
@@ -568,15 +724,26 @@ export const webMCPTools: WebMCPTool[] = [
         `${strong} notes land on strong beats; their pitches come from each bar's chord tones and stepwise connections.`,
         `${strong} nota güçlü vuruşlara denk geliyor; sesler her ölçünün akor seslerinden ve basamaklı bağlantılardan türetildi.`,
       );
-      return commit(nextProject, "generate_line", summary, explanation, range, id);
+      return commitOrDraft(
+        modeOf(args.mode),
+        nextProject,
+        "generate_line",
+        summary,
+        explanation,
+        range,
+        `${style} ${role.replace("_", " ")}`,
+        id,
+      );
     },
   },
   {
     name: "set_tempo",
     description:
       "Use this when the person asks to change playback speed. Duet safely clamps the requested tempo to 40–220 BPM and reports the applied value.",
-    inputSchema: objectSchema({ bpm: number(-1000, 1000) }, ["bpm"]),
+    inputSchema: objectSchema({ bpm: number(-1000, 1000), expectedStateVersion: VERSION_SCHEMA }, ["bpm"]),
     execute: (args) => {
+      const stale = staleCheck(args.expectedStateVersion);
+      if (stale) return stale;
       if (typeof args.bpm !== "number" || !Number.isFinite(args.bpm))
         return failure(
           "INVALID_TEMPO",
@@ -652,6 +819,538 @@ export const webMCPTools: WebMCPTool[] = [
         affectedBars: range,
         summary: `Playing bars ${range.startBar + 1}–${range.endBar}.`,
       };
+    },
+  },
+
+  {
+    name: "get_recent_activity",
+    description:
+      "Use this at the start of a turn to see what the person did on the page since you last looked: recorded takes, notes added or deleted, chords set, selection moves, undo, drafts they accepted or discarded. Lets you react to their playing instead of asking.",
+    inputSchema: objectSchema({ sinceStateVersion: integer(0, 1000000), limit: integer(1, 40) }),
+    annotations: { readOnlyHint: true },
+    execute: (args) => {
+      const state = projectStore.getState();
+      const since = typeof args.sinceStateVersion === "number" ? args.sinceStateVersion : -1;
+      const limit = typeof args.limit === "number" ? args.limit : 15;
+      const live = liveInput.getState();
+      const humanEvents = state.humanLog
+        .filter((event) => event.stateVersion > since)
+        .slice(0, limit)
+        .map((event) => ({
+          type: event.type,
+          trackId: event.trackId,
+          bars: event.bars ? { startBar: event.bars.startBar, endBar: event.bars.endBar } : undefined,
+          count: event.count,
+          detail: event.detail,
+          secondsAgo: Math.round((Date.now() - event.timestamp) / 1000),
+          stateVersion: event.stateVersion,
+        }));
+      const agentCalls = useActivityStore
+        .getState()
+        .activities.slice(0, 10)
+        .map((item) => ({
+          tool: item.tool,
+          status: item.status,
+          secondsAgo: Math.round((Date.now() - item.startedAt) / 1000),
+        }));
+      return {
+        ok: true,
+        stateVersion: state.stateVersion,
+        humanEvents,
+        lastTake: live.lastTake
+          ? {
+              trackId: live.lastTake.trackId,
+              startBar: live.lastTake.startBar,
+              endBar: live.lastTake.endBar,
+              noteCount: live.lastTake.ids.length,
+            }
+          : null,
+        pendingDrafts: state.drafts.map((draft) => ({
+          id: draft.id,
+          label: draft.label,
+          affectedBars: draft.affectedBars,
+        })),
+        agentCalls,
+        hint: humanEvents.length
+          ? "Mention what you noticed in one short sentence before acting, e.g. 'I see you just recorded two bars on Melody'."
+          : "Nothing new from the person since that version.",
+      };
+    },
+  },
+  {
+    name: "suggest_progressions",
+    description:
+      "Use this when the person describes a feeling (happy, sad, dreamy, tense, epic, jazzy, calm) instead of chord names. Returns chord progressions realized in the project's key with a one-line reason each, so you can offer choices in plain words or install one with set_chord_progression / propose_variations.",
+    inputSchema: objectSchema({ mood: enumValue([...MOODS]), bars: integer(1, 16) }, ["mood"]),
+    annotations: { readOnlyHint: true },
+    execute: (args) => {
+      const state = projectStore.getState();
+      const mood = args.mood as Mood;
+      if (!MOODS.includes(mood))
+        return failure(
+          "INVALID_MOOD",
+          `'${String(args.mood)}' is not a known mood.`,
+          `Use one of: ${MOODS.join(", ")}.`,
+        );
+      const bars =
+        typeof args.bars === "number"
+          ? args.bars
+          : state.selection
+            ? state.selection.endBar - state.selection.startBar
+            : 4;
+      const options = suggestProgressions(state.project.keyCenter, mood, bars, state.locale);
+      return {
+        ok: true,
+        stateVersion: state.stateVersion,
+        mood,
+        moodLabel: MOOD_LABELS[mood][state.locale],
+        keyCenter: state.project.keyCenter,
+        currentMode: state.project.mode,
+        bars,
+        options,
+        hint: "Describe two or three of these to the person in everyday words, or call propose_variations with kind 'chords' so they can hear them side by side.",
+      };
+    },
+  },
+  {
+    name: "propose_variations",
+    description:
+      "Use this to let the person choose by ear. Creates 2–3 alternative drafts for the same bars (chords by mood, or bass / pad / counter melody in different styles, or answers to a phrase). Each appears on the page as a lettered option with Listen / Accept / Discard; nothing is written until one is accepted.",
+    inputSchema: objectSchema(
+      {
+        kind: enumValue(["chords", "bass", "pad", "counter_melody", "answer"]),
+        startBar: integer(0, 15),
+        endBar: integer(1, 16),
+        count: integer(2, 3),
+        moods: { type: "array", minItems: 1, maxItems: 3, items: enumValue([...MOODS]) },
+        styles: { type: "array", minItems: 1, maxItems: 3, items: { type: "string", maxLength: 16 } },
+        expectedStateVersion: VERSION_SCHEMA,
+      },
+      ["kind", "startBar", "endBar"],
+    ),
+    execute: (args) => {
+      const stale = staleCheck(args.expectedStateVersion);
+      if (stale) return stale;
+      const range = barRange(args.startBar, args.endBar);
+      if ("ok" in range) return range;
+      const state = projectStore.getState();
+      const kind = args.kind as string;
+      const count = typeof args.count === "number" ? args.count : 2;
+      const bars = range.endBar - range.startBar;
+      const startTick = range.startBar * TICKS_PER_BAR;
+      const endTick = range.endBar * TICKS_PER_BAR;
+      const created: Array<{ id: string; label: string; summary: string }> = [];
+      const addDraft = (
+        label: string,
+        nextProject: Project,
+        toolName: string,
+        summary: string,
+        explanation: string,
+      ) => {
+        const id = nanoid();
+        projectStore.getState().addDraft({
+          id,
+          label,
+          toolName,
+          summary,
+          explanation,
+          affectedBars: range,
+          nextProject,
+          createdAt: Date.now(),
+        });
+        created.push({ id, label, summary });
+      };
+      if (kind === "chords") {
+        const defaults: Mood[] = ["minor", "dorian", "phrygian", "locrian"].includes(state.project.mode)
+          ? ["sad", "epic", "dreamy"]
+          : ["happy", "dreamy", "jazzy"];
+        const moods = (
+          Array.isArray(args.moods) && args.moods.length ? (args.moods as Mood[]) : defaults
+        ).slice(0, count);
+        moods.forEach((mood) => {
+          const option = suggestProgressions(state.project.keyCenter, mood, bars, state.locale)[0];
+          if (!option) return;
+          const id = nanoid();
+          const notes = option.chords.flatMap((symbol, index) =>
+            voiceChord(symbol, range.startBar + index).map((draft) => agentNote(draft, id)),
+          );
+          const nextProject: Project = {
+            ...state.project,
+            chords: [
+              ...state.project.chords.filter((slot) => slot.bar < range.startBar || slot.bar >= range.endBar),
+              ...option.chords.map((symbol, index) => ({
+                bar: range.startBar + index,
+                symbol,
+                source: "agent" as const,
+                changeId: id,
+              })),
+            ].sort((a, b) => a.bar - b.bar),
+            notes: [
+              ...state.project.notes.filter(
+                (note) =>
+                  note.trackId !== "chords" || note.startTick < startTick || note.startTick >= endTick,
+              ),
+              ...notes,
+            ],
+          };
+          addDraft(
+            `${MOOD_LABELS[mood][state.locale]} · ${option.chords.join(" – ")}`,
+            nextProject,
+            "set_chord_progression",
+            localeSummary(
+              state.locale,
+              `AI set ${option.chords.length} chords in bars ${barsLabel(range)} (${option.label}).`,
+              `AI ${barsLabel(range)}. ölçülere ${option.chords.length} akor koydu (${option.label}).`,
+            ),
+            option.why,
+          );
+        });
+      } else if (kind === "answer") {
+        const styles: AnswerStyle[] = (
+          Array.isArray(args.styles)
+            ? (args.styles as AnswerStyle[])
+            : (["echo", "sequence", "invert"] as AnswerStyle[])
+        ).slice(0, count);
+        const sourceStart = Math.max(0, range.startBar - bars);
+        styles.forEach((style) => {
+          const line = answerPhrase(state.project, sourceStart, range.startBar, range.startBar, bars, style);
+          if (!line.length) return;
+          const id = nanoid();
+          const notes = line.map((draft) => agentNote(draft, id));
+          const nextProject: Project = {
+            ...state.project,
+            notes: [
+              ...state.project.notes.filter(
+                (note) =>
+                  note.trackId !== "melody" || note.startTick < startTick || note.startTick >= endTick,
+              ),
+              ...notes,
+            ],
+          };
+          addDraft(
+            `${style} · ${notes.length} notes`,
+            nextProject,
+            "answer_phrase",
+            localeSummary(
+              state.locale,
+              `AI answered your phrase in bars ${barsLabel(range)} (${style}).`,
+              `AI ${barsLabel(range)}. ölçülerde cümlene cevap verdi (${style}).`,
+            ),
+            localeSummary(
+              state.locale,
+              `Your rhythm is kept; pitches are moved through the ${state.project.keyCenter} ${state.project.mode} scale and pulled onto chord tones on strong beats.`,
+              `Ritmin korundu; sesler ${state.project.keyCenter} ${state.project.mode} gamı içinde taşındı ve güçlü vuruşlarda akor seslerine çekildi.`,
+            ),
+          );
+        });
+      } else {
+        const role = kind as LineRole;
+        const missing = Array.from({ length: bars }, (_, index) => range.startBar + index).filter(
+          (bar) => !state.project.chords.some((slot) => slot.bar === bar),
+        );
+        if (missing.length)
+          return failure(
+            "MISSING_CHORDS",
+            `No chord is set in bar ${missing[0] + 1}.`,
+            "Set a chord progression for the requested range first (or propose chords), then retry.",
+          );
+        const styles: LineStyle[] = (
+          Array.isArray(args.styles)
+            ? (args.styles as LineStyle[])
+            : (["simple", "flowing", "syncopated"] as LineStyle[])
+        ).slice(0, count);
+        const targetTrack: TrackId = role === "bass" ? "bass" : role === "pad" ? "chords" : "melody";
+        styles.forEach((style) => {
+          const line = generateLine(state.project, role, range.startBar, range.endBar, style);
+          if (!line.length) return;
+          const id = nanoid();
+          const notes = line.map((draft) => agentNote(draft, id));
+          const base =
+            role === "counter_melody"
+              ? state.project.notes
+              : state.project.notes.filter(
+                  (note) =>
+                    note.trackId !== targetTrack || note.startTick < startTick || note.startTick >= endTick,
+                );
+          addDraft(
+            `${style} ${role.replace("_", " ")} · ${notes.length} notes`,
+            { ...state.project, notes: [...base, ...notes] },
+            "generate_line",
+            localeSummary(
+              state.locale,
+              `AI wrote a ${style} ${role.replace("_", " ")} in bars ${barsLabel(range)}.`,
+              `AI ${barsLabel(range)}. ölçülere ${style} bir ${role.replace("_", " ")} yazdı.`,
+            ),
+            localeSummary(
+              state.locale,
+              `Pitches come from each bar's chord tones; the ${style} style decides the rhythm.`,
+              `Sesler her ölçünün akor seslerinden geliyor; ritmi ${style} stili belirliyor.`,
+            ),
+          );
+        });
+      }
+      if (!created.length)
+        return failure(
+          "NO_VARIATIONS",
+          "No variation could be generated for that range.",
+          "Check the range has chords (for lines) or a phrase before it (for answers), then retry.",
+        );
+      return {
+        ok: true,
+        stateVersion: projectStore.getState().stateVersion,
+        affectedBars: range,
+        drafts: created,
+        hint: "The options are on the page as A/B/C. Ask the person which one they like after listening; then call resolve_draft with that draftId (or they will click Accept).",
+      };
+    },
+  },
+  {
+    name: "answer_phrase",
+    description:
+      "Call and response. Takes the phrase the person just played or selected on the Melody track and writes an answering phrase in the following bars: same rhythm, moved through the key (echo, sequence, invert or contrast), landing on chord tones. Defaults to the last recorded take, then the selection. Returns a draft the person can hear and accept.",
+    inputSchema: objectSchema(
+      {
+        sourceStartBar: integer(0, 15),
+        sourceEndBar: integer(1, 16),
+        targetStartBar: integer(0, 15),
+        answerBars: integer(1, 4),
+        style: enumValue(["echo", "sequence", "invert", "contrast"]),
+        mode: MODE_SCHEMA,
+        expectedStateVersion: VERSION_SCHEMA,
+      },
+      [],
+    ),
+    execute: (args) => {
+      const stale = staleCheck(args.expectedStateVersion);
+      if (stale) return stale;
+      const state = projectStore.getState();
+      const take = liveInput.getState().lastTake;
+      const source =
+        typeof args.sourceStartBar === "number" && typeof args.sourceEndBar === "number"
+          ? { startBar: args.sourceStartBar, endBar: args.sourceEndBar }
+          : take && take.trackId === "melody"
+            ? { startBar: take.startBar, endBar: take.endBar }
+            : state.selection
+              ? { startBar: state.selection.startBar, endBar: state.selection.endBar }
+              : null;
+      if (!source)
+        return failure(
+          "NO_PHRASE",
+          "There is no phrase to answer.",
+          "Ask the person to play or select a few bars on Melody, or pass sourceStartBar/sourceEndBar.",
+        );
+      const sourceRange = barRange(source.startBar, source.endBar);
+      if ("ok" in sourceRange) return sourceRange;
+      const answerBars =
+        typeof args.answerBars === "number" ? args.answerBars : sourceRange.endBar - sourceRange.startBar;
+      const targetStart = typeof args.targetStartBar === "number" ? args.targetStartBar : sourceRange.endBar;
+      const target = barRange(targetStart, targetStart + answerBars);
+      if ("ok" in target)
+        return failure(
+          "NO_ROOM",
+          `The answer would run past bar 16.`,
+          "Pass a smaller answerBars or an earlier targetStartBar.",
+        );
+      const style = (args.style as AnswerStyle | undefined) ?? "echo";
+      const line = answerPhrase(
+        state.project,
+        sourceRange.startBar,
+        sourceRange.endBar,
+        target.startBar,
+        answerBars,
+        style,
+      );
+      if (!line.length)
+        return failure(
+          "NO_PHRASE",
+          `Bars ${barsLabel(sourceRange)} of Melody contain no notes.`,
+          "Point sourceStartBar/sourceEndBar at bars where the person played.",
+        );
+      const id = nanoid();
+      const notes = line.map((draft) => agentNote(draft, id));
+      const startTick = target.startBar * TICKS_PER_BAR;
+      const endTick = target.endBar * TICKS_PER_BAR;
+      const nextProject: Project = {
+        ...state.project,
+        notes: [
+          ...state.project.notes.filter(
+            (note) => note.trackId !== "melody" || note.startTick < startTick || note.startTick >= endTick,
+          ),
+          ...notes,
+        ],
+      };
+      const summary = localeSummary(
+        state.locale,
+        `AI answered your phrase from bars ${barsLabel(sourceRange)} in bars ${barsLabel(target)}.`,
+        `AI ${barsLabel(sourceRange)}. ölçülerdeki cümlene ${barsLabel(target)}. ölçülerde cevap verdi.`,
+      );
+      const explanation = localeSummary(
+        state.locale,
+        `Same rhythm as your phrase; pitches moved through the ${state.project.keyCenter} ${state.project.mode} scale (${style}) and pulled onto chord tones on strong beats, ending on a resting note.`,
+        `Ritmin aynı; sesler ${state.project.keyCenter} ${state.project.mode} gamı içinde taşındı (${style}), güçlü vuruşlarda akor seslerine çekildi ve dinlenen bir notada bitti.`,
+      );
+      return commitOrDraft(
+        modeOf(args.mode),
+        nextProject,
+        "answer_phrase",
+        summary,
+        explanation,
+        target,
+        `${style} answer · ${notes.length} notes`,
+        id,
+      );
+    },
+  },
+  {
+    name: "resolve_draft",
+    description:
+      "Accept or discard drafts you proposed. Use after the person tells you which option they like; accepting writes it to the song as a normal undoable change. Without draftId, acts on the option currently previewed on the page.",
+    inputSchema: objectSchema(
+      { action: enumValue(["accept", "discard", "discard_all"]), draftId: { type: "string", maxLength: 32 } },
+      ["action"],
+    ),
+    execute: (args) => {
+      const state = projectStore.getState();
+      const action = args.action as string;
+      if (action === "discard_all") {
+        state.discardDraft("all");
+        return {
+          ok: true,
+          stateVersion: projectStore.getState().stateVersion,
+          summary: "All drafts discarded.",
+        };
+      }
+      const id =
+        (typeof args.draftId === "string" && args.draftId) ||
+        state.activeDraftId ||
+        state.drafts[state.drafts.length - 1]?.id;
+      const draft = state.drafts.find((item) => item.id === id);
+      if (!draft)
+        return failure(
+          "NO_DRAFT",
+          "There is no pending draft with that id.",
+          "Call get_project_state to see ui.pendingDrafts, or propose a new one.",
+        );
+      if (action === "discard") {
+        state.discardDraft(draft.id);
+        return {
+          ok: true,
+          stateVersion: projectStore.getState().stateVersion,
+          summary: `Draft '${draft.label}' discarded.`,
+        };
+      }
+      const change = state.acceptDraft(draft.id);
+      if (!change) return failure("NO_DRAFT", "The draft could not be accepted.", "Propose it again.");
+      return resultFromChange(change.id);
+    },
+  },
+  {
+    name: "set_sections",
+    description:
+      "Label parts of the song (Intro, Verse, Chorus…) on the bar ruler so you and the person can talk about 'the chorus' instead of bar numbers. Replaces all labels; each starts at a bar and runs until the next.",
+    inputSchema: objectSchema(
+      {
+        sections: {
+          type: "array",
+          minItems: 0,
+          maxItems: 8,
+          items: objectSchema(
+            { startBar: integer(0, 15), name: { type: "string", minLength: 1, maxLength: 24 } },
+            ["startBar", "name"],
+          ),
+        },
+        expectedStateVersion: VERSION_SCHEMA,
+      },
+      ["sections"],
+    ),
+    execute: (args) => {
+      const stale = staleCheck(args.expectedStateVersion);
+      if (stale) return stale;
+      const sections = (args.sections as Section[]).map((section) => ({
+        startBar: Math.floor(section.startBar),
+        name: section.name.trim(),
+      }));
+      if (new Set(sections.map((section) => section.startBar)).size !== sections.length)
+        return failure(
+          "DUPLICATE_SECTION",
+          "Two sections start at the same bar.",
+          "Give every section a different startBar.",
+        );
+      const state = projectStore.getState();
+      const id = nanoid();
+      const nextProject: Project = {
+        ...state.project,
+        sections: [...sections].sort((a, b) => a.startBar - b.startBar),
+      };
+      const names = sections.map((section) => section.name).join(", ");
+      return commit(
+        nextProject,
+        "set_sections",
+        localeSummary(
+          state.locale,
+          `AI labeled ${sections.length} sections: ${names}.`,
+          `AI ${sections.length} bölüm etiketledi: ${names}.`,
+        ),
+        localeSummary(
+          state.locale,
+          "Labels only change how the song is described; no notes were touched.",
+          "Etiketler yalnızca şarkının anlatımını değiştirir; hiçbir notaya dokunulmadı.",
+        ),
+        { startBar: 0, endBar: state.project.barCount },
+        id,
+      );
+    },
+  },
+  {
+    name: "set_instrument",
+    description:
+      "Change the sound of a track: piano, epiano, strings, pad, bass or pluck. Cheap and instantly audible; good when the person says 'softer', 'warmer' or 'like strings'.",
+    inputSchema: objectSchema(
+      {
+        trackId: enumValue(validTrackIds),
+        instrument: enumValue([...INSTRUMENTS]),
+        expectedStateVersion: VERSION_SCHEMA,
+      },
+      ["trackId", "instrument"],
+    ),
+    execute: (args) => {
+      const stale = staleCheck(args.expectedStateVersion);
+      if (stale) return stale;
+      const trackId = args.trackId as TrackId;
+      const instrument = args.instrument as InstrumentId;
+      if (!validTrackIds.includes(trackId))
+        return failure(
+          "INVALID_TRACK",
+          `Track '${String(trackId)}' does not exist.`,
+          "Use melody, bass, or chords.",
+        );
+      if (!INSTRUMENTS.includes(instrument))
+        return failure(
+          "INVALID_INSTRUMENT",
+          `'${String(instrument)}' is not a sound.`,
+          `Use one of: ${INSTRUMENTS.join(", ")}.`,
+        );
+      const state = projectStore.getState();
+      const nextProject: Project = {
+        ...state.project,
+        instruments: { ...(state.project.instruments ?? {}), [trackId]: instrument },
+      };
+      return commit(
+        nextProject,
+        "set_instrument",
+        localeSummary(
+          state.locale,
+          `AI changed the ${trackId} sound to ${instrument}.`,
+          `AI ${trackId} sesini ${instrument} yaptı.`,
+        ),
+        localeSummary(
+          state.locale,
+          "Only the timbre changed; every note stays where it was.",
+          "Sadece tını değişti; tüm notalar yerinde.",
+        ),
+        { startBar: 0, endBar: state.project.barCount },
+        nanoid(),
+      );
     },
   },
 ];

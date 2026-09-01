@@ -26,24 +26,35 @@ The instrumentation lives in `src/webmcp/activity.ts`; `registerTools.ts` wraps 
 
 ## Site tools
 
+Seventeen tools, five read-only. Musical writes default to **draft** mode: the result appears on the page as a ghost preview with Listen / Accept / Discard, and nothing is written until the person (or `resolve_draft`) accepts. Every write accepts an optional `expectedStateVersion` and is rejected with `STALE_STATE` if the person changed the page in between.
+
 | Tool | Type | Purpose |
 | --- | --- | --- |
-| `get_project_state` | Read | Summarizes tempo, key, mode, selection, chords and note ranges. |
-| `get_selection` | Read | Returns the exact notes and chords in the selected bars. |
-| `analyze_harmony` | Read | Computes chord functions and best-fitting mode with `tonal`. |
-| `set_selection` | Control | Shows the person which track and bars the agent will use. |
-| `set_chord_progression` | Write | Validates, voices and installs consecutive chord symbols. |
-| `add_notes` | Write | Adds explicit pitched notes at validated beat positions. |
-| `transform_selection` | Write | Transposes, changes mode, quantizes or humanizes selected notes. |
-| `generate_line` | Write | Creates deterministic bass, counter-melody or pad material. |
+| `get_project_state` | Read | Tempo, key, mode, chords, sections, instruments, note summaries and a `ui` block: active track, selection and who made it, playing/looping/recording, visible bars, pending drafts, last take, undo availability. |
+| `get_recent_activity` | Read | What the person did since a state version: takes, notes added/deleted, chords set, selection moves, undo, drafts accepted or discarded. |
+| `get_selection` | Read | The exact notes and chords in the selected bars. |
+| `analyze_harmony` | Read | Chord functions and best-fitting mode, computed with `tonal`. |
+| `suggest_progressions` | Read | Chord progressions for a feeling (happy, sad, dreamy, tense, epic, jazzy, calm), realized in the project key with a one-line reason each. |
+| `set_selection` | Control | Focuses the person's editor on a track and bar range (drawn in amber). |
+| `play` | Control | Plays a range once audio has been unlocked. |
+| `set_chord_progression` | Write · draft | Validates, voices and installs consecutive chord symbols. |
+| `add_notes` | Write · draft | Adds explicit pitched notes at validated beat positions. |
+| `transform_selection` | Write · draft | Transposes, changes mode, quantizes or humanizes the selected notes. |
+| `generate_line` | Write · draft | Deterministic bass, counter-melody or pad over the chords. |
+| `propose_variations` | Write · drafts | Two or three alternatives for the same bars (chords by mood, lines by style, or answers) shown as A/B/C options to pick by ear. |
+| `answer_phrase` | Write · draft | Call and response: answers the phrase the person just played, keeping its rhythm and moving it through the key. |
+| `resolve_draft` | Write | Accepts or discards pending drafts once the person has decided. |
+| `set_sections` | Write | Labels parts of the song (Intro, Verse, Chorus) on the bar ruler. |
+| `set_instrument` | Write | Changes a track's sound: piano, epiano, strings, pad, bass, pluck. |
 | `set_tempo` | Write | Applies a safe tempo between 40 and 220 BPM. |
-| `play` | Control | Plays a range after browser audio has been unlocked once. |
 
 ## Try these prompts
 
-- “Add jazz chords to bars 1–4.”
+- “Answer the phrase I just played.”
+- “Give me two chord ideas for the chorus, something dreamy.”
 - “Write a flowing bass line under it.”
 - “Make bars 5–8 less sad.”
+- “Make the melody sound like strings.”
 
 ## Using the editor without any theory
 

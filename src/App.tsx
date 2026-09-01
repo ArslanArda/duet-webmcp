@@ -1,6 +1,6 @@
 import { Bot, Eraser, Minus, Pencil, Plus, Scan, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { playProject, stopPlayback, unlockAudio } from "./audio/player";
+import { applyInstruments, isAudioUnlocked, playProject, stopPlayback, unlockAudio } from "./audio/player";
 import { AgentToast } from "./components/AgentToast";
 import { AiActivityBar } from "./components/AiActivityBar";
 import { AiPanel } from "./components/AiPanel";
@@ -8,6 +8,8 @@ import { AppHeader } from "./components/AppHeader";
 import { BarRuler } from "./components/BarRuler";
 import { ChordStrip } from "./components/ChordStrip";
 import { CountInOverlay } from "./components/CountInOverlay";
+import { DraftBar } from "./components/DraftBar";
+import { InstrumentPicker } from "./components/InstrumentPicker";
 import { TakeCard } from "./components/TakeCard";
 import { EditorLayoutContext, KEY_GUTTER, MAX_BAR_WIDTH, MIN_BAR_WIDTH } from "./components/editorLayout";
 import { HelpDialog } from "./components/HelpDialog";
@@ -91,6 +93,9 @@ function App() {
   useEffect(() => {
     document.documentElement.lang = locale;
   }, [locale]);
+  useEffect(() => {
+    if (isAudioUnlocked()) applyInstruments(project.instruments);
+  }, [project.instruments]);
 
   useEffect(() => {
     const node = scrollRef.current;
@@ -327,6 +332,8 @@ function App() {
               ))}
             </div>
 
+            <InstrumentPicker />
+
             <div className="zoom-controls">
               <button
                 type="button"
@@ -417,6 +424,8 @@ function App() {
               </div>
             </div>
           </EditorLayoutContext.Provider>
+
+          <DraftBar />
 
           <TakeCard
             onRequantize={recorder.requantizeTake}

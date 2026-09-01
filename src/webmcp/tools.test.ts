@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { webMCPTools } from "./tools";
 
 describe("WebMCP contracts", () => {
-  it("registers exactly ten focused tools", () => {
-    expect(webMCPTools).toHaveLength(10);
-    expect(webMCPTools.filter((tool) => tool.annotations?.readOnlyHint)).toHaveLength(3);
-    expect(new Set(webMCPTools.map((tool) => tool.name)).size).toBe(10);
+  it("registers seventeen focused tools", () => {
+    expect(webMCPTools).toHaveLength(17);
+    expect(webMCPTools.filter((tool) => tool.annotations?.readOnlyHint)).toHaveLength(5);
+    expect(new Set(webMCPTools.map((tool) => tool.name)).size).toBe(17);
   });
   it("keeps every object schema closed", () => {
     webMCPTools.forEach((tool) =>
@@ -27,5 +27,13 @@ describe("WebMCP contracts", () => {
     };
     expect(result.ok).toBe(false);
     expect(result.error.hint).toContain("endBar");
+  });
+
+  it("exposes what the person sees in the project state", async () => {
+    const tool = webMCPTools.find((item) => item.name === "get_project_state")!;
+    const result = (await tool.execute({})) as { ui: Record<string, unknown>; sections: unknown[] };
+    expect(result.ui).toMatchObject({ activeTrack: expect.any(String), pendingDrafts: [], canUndo: expect.any(Boolean) });
+    expect(result.ui).toHaveProperty("visibleBars");
+    expect(Array.isArray(result.sections)).toBe(true);
   });
 });

@@ -45,6 +45,13 @@ export const TOOL_KINDS: Record<string, ActivityKind> = {
   transform_selection: "write",
   generate_line: "write",
   set_tempo: "write",
+  get_recent_activity: "read",
+  suggest_progressions: "read",
+  propose_variations: "write",
+  answer_phrase: "write",
+  resolve_draft: "write",
+  set_sections: "write",
+  set_instrument: "write",
 };
 
 interface ActivityState {
@@ -172,6 +179,9 @@ export function describeActivity(activity: Activity, locale: Locale): string {
   const count = Array.isArray(a.chords) ? a.chords.length : Array.isArray(a.notes) ? a.notes.length : 0;
   const notes = t(locale, count === 1 ? "noteWord_one" : "noteWord_many");
   const chords = t(locale, count === 1 ? "chordWord_one" : "chordWord_many");
+  const result = isRecord(activity.result) ? activity.result : null;
+  if (!running && activity.status === "ok" && result?.draft === true && typeof result.label === "string")
+    return t(locale, "actDraft", { label: result.label });
   let text: string;
   switch (activity.tool) {
     case "get_project_state":
@@ -209,6 +219,31 @@ export function describeActivity(activity: Activity, locale: Locale): string {
       break;
     case "play":
       text = t(locale, key(activity.tool), { bars: range(a.startBar, a.endBar, t(locale, "wholeSong")) });
+      break;
+    case "get_recent_activity":
+    case "suggest_progressions":
+      text = t(locale, key(activity.tool));
+      break;
+    case "propose_variations":
+      text = t(locale, key(activity.tool), {
+        count: Array.isArray(result?.drafts) ? result.drafts.length : String(a.count ?? 2),
+        bars: affected,
+      });
+      break;
+    case "answer_phrase":
+      text = t(locale, key(activity.tool), { bars: affected });
+      break;
+    case "resolve_draft":
+      text = t(locale, `${running ? "actRun" : "actDone"}_resolve_${String(a.action ?? "accept")}` as TranslationKey);
+      break;
+    case "set_sections":
+      text = t(locale, key(activity.tool), { count: Array.isArray(a.sections) ? a.sections.length : 0 });
+      break;
+    case "set_instrument":
+      text = t(locale, key(activity.tool), {
+        track: trackName(locale, a.trackId),
+        instrument: t(locale, `instrument_${String(a.instrument ?? "piano")}` as TranslationKey),
+      });
       break;
     default:
       text = t(locale, running ? "actRun_generic" : "actDone_generic", { tool: activity.tool });

@@ -1,9 +1,65 @@
 import * as Tone from "tone";
-import type { Note, Project, TrackId } from "../types";
+import type { InstrumentId, Note, Project, TrackId } from "../types";
 import { TICKS_PER_BAR, TICKS_PER_BEAT } from "../types";
 import { setPlayheadTick } from "./playhead";
 
 let synths: Record<TrackId, Tone.PolySynth> | null = null;
+let appliedInstruments: Partial<Record<TrackId, InstrumentId>> = {};
+
+type SynthOptions = Parameters<Tone.PolySynth["set"]>[0] & { volume: number };
+
+/** Small, distinct presets built from Tone.Synth so a person hears the difference immediately. */
+const INSTRUMENT_PRESETS: Record<InstrumentId, SynthOptions> = {
+  piano: {
+    oscillator: { type: "triangle" },
+    envelope: { attack: 0.005, decay: 0.35, sustain: 0.2, release: 0.8 },
+    volume: -8,
+  },
+  epiano: {
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.01, decay: 0.6, sustain: 0.35, release: 1.2 },
+    volume: -8,
+  },
+  strings: {
+    oscillator: { type: "sawtooth" },
+    envelope: { attack: 0.35, decay: 0.3, sustain: 0.8, release: 1.6 },
+    volume: -18,
+  },
+  pad: {
+    oscillator: { type: "triangle" },
+    envelope: { attack: 0.6, decay: 0.4, sustain: 0.7, release: 2.4 },
+    volume: -14,
+  },
+  bass: {
+    oscillator: { type: "square" },
+    envelope: { attack: 0.01, decay: 0.2, sustain: 0.5, release: 0.3 },
+    volume: -12,
+  },
+  pluck: {
+    oscillator: { type: "triangle" },
+    envelope: { attack: 0.002, decay: 0.18, sustain: 0.0, release: 0.25 },
+    volume: -8,
+  },
+};
+
+export const DEFAULT_INSTRUMENTS: Record<TrackId, InstrumentId> = {
+  melody: "piano",
+  bass: "bass",
+  chords: "epiano",
+};
+
+/** Apply the project's instrument choices to the live synths (no-op when unchanged). */
+export function applyInstruments(instruments: Partial<Record<TrackId, InstrumentId>> = {}) {
+  const current = getSynths();
+  (Object.keys(current) as TrackId[]).forEach((trackId) => {
+    const instrument = instruments[trackId] ?? DEFAULT_INSTRUMENTS[trackId];
+    if (appliedInstruments[trackId] === instrument) return;
+    const { volume, ...options } = INSTRUMENT_PRESETS[instrument];
+    current[trackId].set(options);
+    current[trackId].volume.value = volume;
+    appliedInstruments = { ...appliedInstruments, [trackId]: instrument };
+  });
+}
 let click: Tone.Synth | null = null;
 let animationFrame = 0;
 let activeRun: {
@@ -30,9 +86,14 @@ function getSynths() {
         envelope: { attack: 0.04, decay: 0.2, sustain: 0.28, release: 1.1 },
       }).toDestination(),
     };
-    synths.melody.volume.value = -10;
-    synths.bass.volume.value = -8;
-    synths.chords.volume.value = -14;
+    appliedInstruments = {};
+    const created = synths;
+    (Object.keys(created) as TrackId[]).forEach((trackId) => {
+      const { volume, ...options } = INSTRUMENT_PRESETS[DEFAULT_INSTRUMENTS[trackId]];
+      created[trackId].set(options);
+      created[trackId].volume.value = volume;
+      appliedInstruments[trackId] = DEFAULT_INSTRUMENTS[trackId];
+    });
   }
   return synths;
 }
@@ -151,6 +212,7 @@ export function playProject(
   stopPlayback();
   const transport = Tone.getTransport();
   const instruments = getSynths();
+  applyInstruments(project.instruments);
   const tempo = project.tempo;
   transport.bpm.value = tempo;
 

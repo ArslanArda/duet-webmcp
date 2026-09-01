@@ -5,7 +5,7 @@ import { t } from "../i18n";
 import { midiToPitchName, scaleChromas } from "../music/theory";
 import { useProjectStore } from "../store/projectStore";
 import { FLASH_MS, useActivityStore } from "../webmcp/activity";
-import { useLiveInput } from "../input/liveInput";
+import { liveInput, useLiveInput } from "../input/liveInput";
 import { getPlayheadTick } from "../audio/playhead";
 import { MIN_NOTE_TICKS, PROJECT_BARS, TICKS_PER_BAR, TICKS_PER_BEAT, type Note } from "../types";
 import {
@@ -65,7 +65,24 @@ export function PianoRoll() {
     snapshot,
     completeOnboarding,
     setAnnouncement,
+    drafts,
+    activeDraftId,
   } = useProjectStore();
+  const activeDraft = drafts.find((draft) => draft.id === activeDraftId) ?? null;
+  const draftDiff = useMemo(() => {
+    if (!activeDraft) return null;
+    const currentIds = new Set(project.notes.map((note) => note.id));
+    const nextIds = new Set(activeDraft.nextProject.notes.map((note) => note.id));
+    return {
+      added: activeDraft.nextProject.notes.filter(
+        (note) => !currentIds.has(note.id) && note.trackId === activeTrack,
+      ),
+      removed: project.notes.filter((note) => !nextIds.has(note.id) && note.trackId === activeTrack),
+      otherAdded: activeDraft.nextProject.notes.filter(
+        (note) => !currentIds.has(note.id) && note.trackId !== activeTrack,
+      ),
+    };
+  }, [activeDraft, project.notes, activeTrack]);
   const gridRef = useRef<HTMLCanvasElement | null>(null);
   const overlayRef = useRef<HTMLCanvasElement | null>(null);
   const keysRef = useRef<HTMLCanvasElement | null>(null);
@@ -201,7 +218,51 @@ export function PianoRoll() {
         ctx.fillRect(r.x + r.w - EDGE_HANDLE - 1, r.y + 4, 2, r.h - 8);
       }
     });
-  }, [gridWidth, barWidth, chromas, selection, selectionSource, ghostNotes, trackNotes, noteRect, xForTick]);
+
+    if (draftDiff) {
+      draftDiff.removed.forEach((note) => {
+        const r = noteRect(note);
+        ctx.fillStyle = "rgba(11,15,21,.55)";
+        ctx.fillRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
+        ctx.strokeStyle = "rgba(248,113,113,.8)";
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(r.x + 2, r.y + r.h / 2);
+        ctx.lineTo(r.x + r.w - 2, r.y + r.h / 2);
+        ctx.stroke();
+      });
+      draftDiff.otherAdded.forEach((note) => {
+        const r = noteRect(note);
+        ctx.fillStyle = "rgba(244,168,82,.16)";
+        ctx.beginPath();
+        ctx.roundRect(r.x + 1, r.y + 2, r.w - 2, r.h - 4, 3);
+        ctx.fill();
+      });
+      draftDiff.added.forEach((note) => {
+        const r = noteRect(note);
+        ctx.fillStyle = "rgba(244,168,82,.38)";
+        ctx.strokeStyle = "rgba(255,208,149,.95)";
+        ctx.lineWidth = 1.3;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.roundRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2, 3);
+        ctx.fill();
+        ctx.stroke();
+        ctx.setLineDash([]);
+      });
+    }
+  }, [
+    gridWidth,
+    barWidth,
+    chromas,
+    selection,
+    selectionSource,
+    ghostNotes,
+    trackNotes,
+    noteRect,
+    xForTick,
+    draftDiff,
+  ]);
 
   useEffect(() => {
     const canvas = keysRef.current;
@@ -360,6 +421,28 @@ export function PianoRoll() {
       }),
     [scheduleOverlay, xForTick],
   );
+
+  /* Tell the agent which bars are on screen. */
+  useEffect(() => {
+    const scroller = overlayRef.current?.closest<HTMLElement>(".grid-scroll");
+    if (!scroller) return;
+    const report = () => {
+      const startBar = Math.max(0, Math.floor(scroller.scrollLeft / barWidth));
+      const endBar = Math.min(
+        PROJECT_BARS,
+        Math.ceil((scroller.scrollLeft + scroller.clientWidth - KEY_GUTTER) / barWidth),
+      );
+      liveInput.getState().setVisibleBars({ startBar, endBar: Math.max(startBar + 1, endBar) });
+    };
+    report();
+    scroller.addEventListener("scroll", report, { passive: true });
+    const observer = new ResizeObserver(report);
+    observer.observe(scroller);
+    return () => {
+      scroller.removeEventListener("scroll", report);
+      observer.disconnect();
+    };
+  }, [barWidth]);
 
   /* Keep the active track's notes in view when the track changes. */
   useEffect(() => {

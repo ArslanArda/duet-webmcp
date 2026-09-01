@@ -37,6 +37,9 @@ interface LiveInputState {
   midiPulse: number;
   recording: RecordingRange | null;
   lastTake: Take | null;
+  /** Bars currently visible in the grid, so the agent knows what the person is looking at. */
+  visibleBars: { startBar: number; endBar: number };
+  setVisibleBars: (range: { startBar: number; endBar: number }) => void;
   hold: (note: HeldNote) => void;
   release: (key: string) => void;
   clearHeld: () => void;
@@ -52,6 +55,13 @@ export const useLiveInput = create<LiveInputState>()((set) => ({
   midiPulse: 0,
   recording: null,
   lastTake: null,
+  visibleBars: { startBar: 0, endBar: 16 },
+  setVisibleBars: (visibleBars) =>
+    set((state) =>
+      state.visibleBars.startBar === visibleBars.startBar && state.visibleBars.endBar === visibleBars.endBar
+        ? state
+        : { visibleBars },
+    ),
   hold: (note) => set((state) => ({ held: [...state.held.filter((item) => item.key !== note.key), note] })),
   release: (key) => set((state) => ({ held: state.held.filter((item) => item.key !== key) })),
   clearHeld: () => set({ held: [] }),

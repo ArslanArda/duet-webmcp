@@ -48,6 +48,10 @@ export function createDemoProject(): Project {
     barCount: PROJECT_BARS,
     notes: [...chordNotes, ...melody],
     chords,
+    sections: [
+      { startBar: 0, name: "Verse" },
+      { startBar: 8, name: "Chorus" },
+    ],
   };
 }
 

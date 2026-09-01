@@ -9,14 +9,27 @@ import { useEditorLayout } from "./editorLayout";
 
 export function ChordStrip() {
   const { barWidth, gridWidth } = useEditorLayout();
-  const { project, locale, editorMode, selection, selectionSource, activeTrack, clearHumanChord } =
-    useProjectStore();
+  const {
+    project,
+    locale,
+    editorMode,
+    selection,
+    selectionSource,
+    activeTrack,
+    clearHumanChord,
+    drafts,
+    activeDraftId,
+  } = useProjectStore();
+  const activeDraft = drafts.find((draft) => draft.id === activeDraftId) ?? null;
   const [editing, setEditing] = useState<{ bar: number; anchor: DOMRect } | null>(null);
 
   return (
     <div className="chord-strip" style={{ width: gridWidth }}>
       {Array.from({ length: PROJECT_BARS }, (_, bar) => {
-        const slot = project.chords.find((item) => item.bar === bar);
+        const currentSlot = project.chords.find((item) => item.bar === bar);
+        const draftSlot = activeDraft?.nextProject.chords.find((item) => item.bar === bar);
+        const isDraft = Boolean(activeDraft) && (draftSlot?.symbol ?? null) !== (currentSlot?.symbol ?? null);
+        const slot = isDraft ? draftSlot : currentSlot;
         const info = slot ? describeChord(slot.symbol, locale) : null;
         const inSelection = selection ? bar >= selection.startBar && bar < selection.endBar : false;
         const classes = [
@@ -25,6 +38,7 @@ export function ChordStrip() {
           inSelection && activeTrack === "chords" ? "selected-strong" : "",
           inSelection && selectionSource === "agent" ? "agent-selected" : "",
           slot?.source === "agent" ? "agent" : "",
+          isDraft ? "draft" : "",
           editing?.bar === bar ? "editing" : "",
         ].join(" ");
         return (

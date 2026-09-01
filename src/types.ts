@@ -40,6 +40,15 @@ export interface Selection {
   endBar: number;
 }
 
+export const INSTRUMENTS = ["piano", "epiano", "strings", "pad", "bass", "pluck"] as const;
+export type InstrumentId = (typeof INSTRUMENTS)[number];
+
+/** A named region of the song ("Verse", "Chorus") so people and agents share vocabulary. */
+export interface Section {
+  startBar: number;
+  name: string;
+}
+
 export interface Project {
   tempo: number;
   keyCenter: string;
@@ -47,6 +56,47 @@ export interface Project {
   barCount: number;
   notes: Note[];
   chords: ChordSlot[];
+  sections?: Section[];
+  instruments?: Partial<Record<TrackId, InstrumentId>>;
+}
+
+/**
+ * An agent proposal the person has not accepted yet. Drafts render as ghosts,
+ * can be auditioned, and only become a Change when accepted.
+ */
+export interface Draft {
+  id: string;
+  label: string;
+  toolName: string;
+  summary: string;
+  explanation: string;
+  affectedBars: { startBar: number; endBar: number };
+  nextProject: Project;
+  createdAt: number;
+}
+
+export type HumanEventType =
+  | "take"
+  | "notes_added"
+  | "notes_changed"
+  | "notes_deleted"
+  | "chord_set"
+  | "chord_cleared"
+  | "selection"
+  | "undo"
+  | "redo"
+  | "draft_accepted"
+  | "draft_discarded"
+  | "project_reset";
+
+export interface HumanEvent {
+  type: HumanEventType;
+  timestamp: number;
+  stateVersion: number;
+  trackId?: TrackId;
+  bars?: { startBar: number; endBar: number };
+  count?: number;
+  detail?: string;
 }
 
 export interface InversePatch {
@@ -57,6 +107,8 @@ export interface InversePatch {
   previousTempo?: number;
   previousKeyCenter?: string;
   previousMode?: string;
+  previousSections?: Section[];
+  previousInstruments?: Partial<Record<TrackId, InstrumentId>>;
 }
 
 export interface Change {

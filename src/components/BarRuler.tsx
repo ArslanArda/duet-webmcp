@@ -8,7 +8,8 @@ import { useEditorLayout } from "./editorLayout";
 /** Bar numbers across the top of the grid. Dragging here selects bars. */
 export function BarRuler() {
   const { barWidth, gridWidth } = useEditorLayout();
-  const { locale, selection, selectionSource, activeTrack, setSelection } = useProjectStore();
+  const { locale, selection, selectionSource, activeTrack, setSelection, project } = useProjectStore();
+  const sections = project.sections ?? [];
   const [preview, setPreview] = useState<{ startBar: number; endBar: number } | null>(null);
   const drag = useRef<number | null>(null);
   const marker = useRef<HTMLDivElement | null>(null);
@@ -78,7 +79,12 @@ export function BarRuler() {
           className={`ruler-cell ${shown && bar >= shown.startBar && bar < shown.endBar ? "selected" : ""} ${!preview && selectionSource === "agent" ? "agent" : ""} ${bar % 4 === 0 ? "strong" : ""}`}
           style={{ width: barWidth }}
         >
-          {bar + 1}
+          {sections.find((section) => section.startBar === bar) ? (
+            <span className="section-label" title={t(locale, "sectionLabel")}>
+              {sections.find((section) => section.startBar === bar)!.name}
+            </span>
+          ) : null}
+          <span className="bar-number">{bar + 1}</span>
         </div>
       ))}
       <div ref={marker} className="ruler-playhead" hidden />

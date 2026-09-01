@@ -4,7 +4,10 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import type {
   AgentChangeInput,
   Change,
+  Draft,
   EditorMode,
+  HumanEvent,
+  InstrumentId,
   HistoryEntry,
   InversePatch,
   Locale,
@@ -12,6 +15,7 @@ import type {
   NoteSource,
   Project,
   Quantize,
+  Section,
   Selection,
   TrackId,
 } from "../types";
@@ -57,8 +61,18 @@ function createInversePatch(before: Project, after: Project): InversePatch {
     previousTempo: before.tempo !== after.tempo ? before.tempo : undefined,
     previousKeyCenter: before.keyCenter !== after.keyCenter ? before.keyCenter : undefined,
     previousMode: before.mode !== after.mode ? before.mode : undefined,
+    previousSections:
+      JSON.stringify(before.sections ?? []) !== JSON.stringify(after.sections ?? [])
+        ? (before.sections ?? [])
+        : undefined,
+    previousInstruments:
+      JSON.stringify(before.instruments ?? {}) !== JSON.stringify(after.instruments ?? {})
+        ? (before.instruments ?? {})
+        : undefined,
   };
 }
+
+const HUMAN_LOG_LIMIT = 40;
 
 interface HistoryOptions {
   /** Push the current state onto the undo stack before applying. */
@@ -74,6 +88,11 @@ export interface ProjectState {
   stateVersion: number;
   past: HistoryEntry[];
   future: HistoryEntry[];
+  /** Agent proposals awaiting the person's decision. */
+  drafts: Draft[];
+  activeDraftId: string | null;
+  /** What the person did recently, for get_recent_activity. */
+  humanLog: HumanEvent[];
   activeTrack: TrackId;
   editorMode: EditorMode;
   locale: Locale;
@@ -95,6 +114,13 @@ export interface ProjectState {
   setEditorMode: (mode: EditorMode) => void;
   setLocale: (locale: Locale) => void;
   setProjectMeta: (patch: Partial<Pick<Project, "tempo" | "keyCenter" | "mode">>) => void;
+  setSections: (sections: Section[]) => void;
+  setInstrument: (trackId: TrackId, instrument: InstrumentId) => void;
+  logHuman: (event: Omit<HumanEvent, "timestamp" | "stateVersion">) => void;
+  addDraft: (draft: Draft) => void;
+  setActiveDraft: (id: string | null) => void;
+  acceptDraft: (id: string) => Change | null;
+  discardDraft: (id: string | "all") => void;
   addHumanNote: (note: Omit<Note, "id" | "source">, options?: HistoryOptions) => string;
   updateHumanNote: (
     id: string,
@@ -155,6 +181,17 @@ const pushHistory = (state: ProjectState) => ({
 
 const barTicks = (bar: number) => bar * TICKS_PER_BAR;
 
+const pushLog = (state: ProjectState, event: Omit<HumanEvent, "timestamp" | "stateVersion">): HumanEvent[] =>
+  [{ ...event, timestamp: Date.now(), stateVersion: state.stateVersion + 1 }, ...state.humanLog].slice(
+    0,
+    HUMAN_LOG_LIMIT,
+  );
+
+const barsOf = (note: Pick<Note, "startTick" | "durationTicks">) => ({
+  startBar: Math.floor(note.startTick / TICKS_PER_BAR),
+  endBar: Math.min(PROJECT_BARS, Math.ceil((note.startTick + note.durationTicks) / TICKS_PER_BAR)),
+});
+
 export const useProjectStore = create<ProjectState>()(
   persist(
     (set, get) => {
@@ -178,6 +215,9 @@ export const useProjectStore = create<ProjectState>()(
         stateVersion: 1,
         past: [],
         future: [],
+        drafts: [],
+        activeDraftId: null,
+        humanLog: [],
         activeTrack: "melody",
         editorMode: "draw",
         locale: detectLocale(),
@@ -193,7 +233,66 @@ export const useProjectStore = create<ProjectState>()(
         announcement: "",
 
         setSelection: (selection, source = "human") =>
-          set((state) => ({ selection, selectionSource: source, stateVersion: state.stateVersion + 1 })),
+          set((state) => ({
+            selection,
+            selectionSource: source,
+            stateVersion: state.stateVersion + 1,
+            humanLog:
+              source === "human" && selection
+                ? pushLog(state, { type: "selection", trackId: selection.trackId, bars: selection })
+                : state.humanLog,
+          })),
+        logHuman: (event) => set((state) => ({ humanLog: pushLog(state, event) })),
+        setSections: (sections) =>
+          set((state) =>
+            apply(state, {
+              ...state.project,
+              sections: [...sections].sort((a, b) => a.startBar - b.startBar),
+            }),
+          ),
+        setInstrument: (trackId, instrument) =>
+          set((state) =>
+            apply(state, {
+              ...state.project,
+              instruments: { ...(state.project.instruments ?? {}), [trackId]: instrument },
+            }),
+          ),
+        addDraft: (draft) =>
+          set((state) => ({ drafts: [...state.drafts, draft].slice(-4), activeDraftId: draft.id })),
+        setActiveDraft: (activeDraftId) => set({ activeDraftId }),
+        acceptDraft: (id) => {
+          const draft = get().drafts.find((item) => item.id === id);
+          if (!draft) return null;
+          const change = get().commitAgentChange({
+            id: draft.id,
+            toolName: draft.toolName,
+            summary: draft.summary,
+            explanation: draft.explanation,
+            affectedBars: draft.affectedBars,
+            nextProject: { ...draft.nextProject },
+          });
+          set((state) => ({
+            drafts: [],
+            activeDraftId: null,
+            humanLog: pushLog(state, {
+              type: "draft_accepted",
+              bars: draft.affectedBars,
+              detail: draft.label,
+            }),
+          }));
+          return change;
+        },
+        discardDraft: (id) =>
+          set((state) => {
+            const remaining = id === "all" ? [] : state.drafts.filter((item) => item.id !== id);
+            return {
+              drafts: remaining,
+              activeDraftId: remaining.some((item) => item.id === state.activeDraftId)
+                ? state.activeDraftId
+                : (remaining[remaining.length - 1]?.id ?? null),
+              humanLog: pushLog(state, { type: "draft_discarded", detail: id === "all" ? "all" : id }),
+            };
+          }),
         setActiveTrack: (activeTrack) =>
           set((state) => ({
             activeTrack,
@@ -213,7 +312,18 @@ export const useProjectStore = create<ProjectState>()(
             apply(
               state,
               { ...state.project, notes: [...state.project.notes, { ...input, id, source: "human" }] },
-              { ...options, extra: { onboarding: [state.onboarding[0], true, state.onboarding[2]] } },
+              {
+                ...options,
+                extra: {
+                  onboarding: [state.onboarding[0], true, state.onboarding[2]],
+                  humanLog: pushLog(state, {
+                    type: "notes_added",
+                    trackId: input.trackId,
+                    bars: barsOf(input),
+                    count: 1,
+                  }),
+                },
+              },
             ),
           );
           return id;
@@ -236,7 +346,22 @@ export const useProjectStore = create<ProjectState>()(
             apply(
               state,
               { ...state.project, notes: state.project.notes.filter((note) => note.id !== id) },
-              options,
+              {
+                ...options,
+                extra: (() => {
+                  const note = state.project.notes.find((item) => item.id === id);
+                  return note
+                    ? {
+                        humanLog: pushLog(state, {
+                          type: "notes_deleted",
+                          trackId: note.trackId,
+                          bars: barsOf(note),
+                          count: 1,
+                        }),
+                      }
+                    : undefined;
+                })(),
+              },
             ),
           ),
         deleteInRange: (selection) =>
@@ -303,6 +428,7 @@ export const useProjectStore = create<ProjectState>()(
             project: entry.project,
             changeLog: entry.changeLog,
             stateVersion: state.stateVersion + 1,
+            humanLog: pushLog(state, { type: "undo" }),
           });
           return true;
         },
@@ -319,6 +445,7 @@ export const useProjectStore = create<ProjectState>()(
             project: entry.project,
             changeLog: entry.changeLog,
             stateVersion: state.stateVersion + 1,
+            humanLog: pushLog(state, { type: "redo" }),
           });
           return true;
         },
@@ -361,6 +488,8 @@ export const useProjectStore = create<ProjectState>()(
                 tempo: patch.previousTempo ?? state.project.tempo,
                 keyCenter: patch.previousKeyCenter ?? state.project.keyCenter,
                 mode: patch.previousMode ?? state.project.mode,
+                sections: patch.previousSections ?? state.project.sections,
+                instruments: patch.previousInstruments ?? state.project.instruments,
                 notes: [
                   ...state.project.notes.filter((note) => !removeIds.has(note.id)),
                   ...patch.restoreNotes,
@@ -375,9 +504,29 @@ export const useProjectStore = create<ProjectState>()(
           }),
 
         newProject: () =>
-          set((state) => apply(state, createEmptyProject(), { changeLog: [], extra: { selection: null } })),
+          set((state) =>
+            apply(state, createEmptyProject(), {
+              changeLog: [],
+              extra: {
+                selection: null,
+                drafts: [],
+                activeDraftId: null,
+                humanLog: pushLog(state, { type: "project_reset", detail: "empty" }),
+              },
+            }),
+          ),
         loadDemoProject: () =>
-          set((state) => apply(state, createDemoProject(), { changeLog: [], extra: { selection: null } })),
+          set((state) =>
+            apply(state, createDemoProject(), {
+              changeLog: [],
+              extra: {
+                selection: null,
+                drafts: [],
+                activeDraftId: null,
+                humanLog: pushLog(state, { type: "project_reset", detail: "demo" }),
+              },
+            }),
+          ),
 
         setPlaying: (isPlaying) => set({ isPlaying }),
         setLooping: (isLooping) => set({ isLooping }),
