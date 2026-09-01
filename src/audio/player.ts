@@ -21,9 +21,27 @@ export async function unlockAudio() { await Tone.start(); getSynths(); return is
 
 function secondsForTicks(ticks: number, bpm: number) { return (ticks / TICKS_PER_BEAT) * (60 / bpm); }
 
+export function releasePreviewNotes() {
+  if (synths) Object.values(synths).forEach((synth) => synth.releaseAll());
+}
+
 export function stopPlayback() {
   const transport = Tone.getTransport(); transport.stop(); transport.cancel(0);
-  if (synths) Object.values(synths).forEach((synth) => synth.releaseAll());
+  releasePreviewNotes();
+}
+
+export async function startPreviewNote(note: Pick<Note, "pitch" | "velocity" | "trackId">) {
+  await unlockAudio();
+  getSynths()[note.trackId].triggerAttack(
+    Tone.Frequency(note.pitch, "midi").toFrequency(),
+    undefined,
+    note.velocity / 127,
+  );
+}
+
+export function stopPreviewNote(note: Pick<Note, "pitch" | "trackId">) {
+  if (!synths) return;
+  synths[note.trackId].triggerRelease(Tone.Frequency(note.pitch, "midi").toFrequency());
 }
 
 export function playProject(project: Project, startBar = 0, endBar = project.barCount, loop = false) {

@@ -3,6 +3,8 @@ export class PolySynth {
   constructor(synth: typeof Synth, options?: Record<string, unknown>);
   volume: { value: number };
   toDestination(): this;
+  triggerAttack(frequency: number, time?: number, velocity?: number): void;
+  triggerRelease(frequency: number, time?: number): void;
   triggerAttackRelease(frequency: number, duration: string | number, time?: number, velocity?: number): void;
   releaseAll(): void;
 }
