@@ -4,7 +4,7 @@
 
 Duet is a local-first, responsive piano-roll editor where a person and ChatGPT/Codex can compose on the same live page. The editor works on its own in an ordinary browser; compatible ChatGPT desktop browsers additionally discover its WebMCP Site Tools.
 
-> Live demo: deployment URL will be added after the first Vercel release.
+> Live demo: [duet-webmcp.vercel.app](https://duet-webmcp.vercel.app)
 
 <!-- Demo GIF placeholder: docs/demo.gif -->
 
