@@ -19,5 +19,6 @@ export function getTransport(): {
   stop(): void;
   cancel(time?: number): void;
   schedule(callback: (time: number) => void, time: number): number;
+  scheduleRepeat(callback: (time: number) => void, interval: number, startTime?: number): number;
 };
 export function Frequency(value: number, unit: "midi"): { toFrequency(): number };

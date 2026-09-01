@@ -50,12 +50,16 @@ export function playProject(project: Project, startBar = 0, endBar = project.bar
   const transport = Tone.getTransport(); const instruments = getSynths();
   transport.bpm.value = project.tempo;
   const rangeStart = startBar * TICKS_PER_BAR; const rangeEnd = endBar * TICKS_PER_BAR;
+  const loopDuration = secondsForTicks(rangeEnd - rangeStart, project.tempo);
   project.notes.filter((note) => note.startTick < rangeEnd && note.startTick + note.durationTicks > rangeStart).forEach((note) => {
     const offset = Math.max(0, note.startTick - rangeStart);
     const duration = secondsForTicks(Math.min(note.durationTicks, rangeEnd - Math.max(note.startTick, rangeStart)), project.tempo);
-    transport.schedule((time) => instruments[note.trackId].triggerAttackRelease(Tone.Frequency(note.pitch, "midi").toFrequency(), duration, time, note.velocity / 127), secondsForTicks(offset, project.tempo));
+    const playNote = (time: number) => instruments[note.trackId].triggerAttackRelease(Tone.Frequency(note.pitch, "midi").toFrequency(), duration, time, note.velocity / 127);
+    const startTime = secondsForTicks(offset, project.tempo);
+    if (loop) transport.scheduleRepeat(playNote, loopDuration, startTime);
+    else transport.schedule(playNote, startTime);
   });
-  transport.loop = loop; transport.loopStart = 0; transport.loopEnd = secondsForTicks(rangeEnd - rangeStart, project.tempo);
+  transport.loop = false; transport.loopStart = 0; transport.loopEnd = loopDuration;
   transport.start();
   return true;
 }
