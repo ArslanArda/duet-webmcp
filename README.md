@@ -33,6 +33,17 @@ The page registers tools directly through `document.modelContext.registerTool`. 
 - “Write a flowing bass line under it.”
 - “Make bars 5–8 less sad.”
 
+## Using the editor without any theory
+
+- **Play first.** The demo song loads on first visit; Space or the Play button plays the whole song or just the selected bars, with a moving playhead and a bar/beat clock.
+- **Select bars** by dragging across the bar numbers. Prompts in the AI panel follow the selection.
+- **Draw notes** by clicking an empty cell; drag a note to move it, drag its right edge to stretch it, right-click (or the Erase tool) to delete it. Other tracks show as ghost notes so bass and melody line up.
+- **Chords in plain language.** Click a chord cell to open the chord picker: chords that fit the key, a root + type grid with a one-line mood for each type (“Minor 7 · warm, smooth jazz”), and an expert field for typing symbols.
+- **Key, mood and tempo** are picked with words next to the technical names (“C · Sad, serious (Minor)”, “Medium · 100”).
+- **Nothing is destructive.** Every edit, including AI edits, is in one undo history (⌘/Ctrl+Z, Shift+Z). The AI panel additionally offers per-change undo.
+- **Record** counts in four beats, plays the range with a click, and captures what you play on the computer keys (A–L, black keys on W E T Y U O P) or a MIDI keyboard; timing snaps to the grid when you stop.
+- English and Turkish are built in and picked from the browser language.
+
 ## Local development
 
 ```bash
@@ -44,7 +55,7 @@ Open the printed local URL. Run `npm test` and `npm run build` before shipping.
 
 ## MIDI and privacy
 
-Web MIDI is optional. Click **Connect MIDI** to use a class-compliant Casio CT-S, CT-X or LK keyboard. The A–L computer keys and the on-screen piano roll work without hardware. Projects, preferences and undo history stay in this browser's local storage; Duet sends no project data anywhere.
+Web MIDI is optional. Click **Connect a keyboard** to use a class-compliant Casio CT-S, CT-X or LK keyboard. The A–L computer keys and the on-screen piano roll work without hardware. Projects, preferences and undo history stay in this browser's local storage; Duet sends no project data anywhere.
 
 ## Limits
 
