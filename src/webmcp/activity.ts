@@ -141,9 +141,10 @@ export function instrumentTool(tool: WebMCPTool): WebMCPTool {
     ...tool,
     execute: async (args, agent) => {
       const { start, finish, fail } = useActivityStore.getState();
-      const id = start(tool.name, isRecord(args) ? args : {});
+      const input = isRecord(args) ? args : {};
+      const id = start(tool.name, input);
       try {
-        const result = await tool.execute(args, agent);
+        const result = await tool.execute(input, agent);
         if (isRecord(result) && result.ok === false && isRecord(result.error)) {
           fail(id, {
             message: String(result.error.message ?? ""),

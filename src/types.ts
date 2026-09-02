@@ -151,6 +151,8 @@ export interface ToolSuccess {
 
 export interface ToolFailure {
   ok: false;
+  /** Current page version, so the agent can re-read before retrying. */
+  stateVersion?: number;
   error: {
     code: string;
     message: string;

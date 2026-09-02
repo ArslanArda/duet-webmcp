@@ -23,8 +23,8 @@ interface WebMCPTool {
   description: string;
   inputSchema: Record<string, unknown>;
   annotations?: { readOnlyHint?: boolean };
-  /** The second argument is the W3C draft's agent handle; ChatGPT passes only args. */
-  execute: (args: Record<string, unknown>, agent?: unknown) => Promise<unknown> | unknown;
+  /** Second argument: the W3C draft passes options such as { signal }; ChatGPT passes only args. */
+  execute: (args: Record<string, unknown>, options?: unknown) => Promise<unknown> | unknown;
 }
 interface ModelContext {
   registerTool(tool: WebMCPTool): Promise<unknown>;

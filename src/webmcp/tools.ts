@@ -45,7 +45,11 @@ const number = (minimum: number, maximum: number) => ({ type: "number", minimum,
 const enumValue = (values: string[]) => ({ type: "string", enum: values });
 
 function failure(code: string, message: string, hint: string, retryable = true): ToolFailure {
-  return { ok: false, error: { code, message, hint, retryable } };
+  return {
+    ok: false,
+    stateVersion: projectStore.getState().stateVersion,
+    error: { code, message, hint, retryable },
+  };
 }
 
 function barRange(startBar: unknown, endBar: unknown) {
