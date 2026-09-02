@@ -11,7 +11,11 @@ describe("plain-language diagnosis", () => {
   });
   it("reports missing chords and static melodies", () => {
     const project = createDemoProject();
-    const bare = { ...project, chords: [], notes: project.notes.filter((n) => n.trackId === "melody").map((n) => ({ ...n, pitch: 72 })) };
+    const bare = {
+      ...project,
+      chords: [],
+      notes: project.notes.filter((n) => n.trackId === "melody").map((n) => ({ ...n, pitch: 72 })),
+    };
     const codes = describeRange(bare, 0, 8, "tr").findings.map((f) => f.code);
     expect(codes).toContain("NO_CHORDS");
     expect(codes).toContain("MELODY_STATIC");
@@ -20,7 +24,18 @@ describe("plain-language diagnosis", () => {
     const project = createDemoProject();
     const withBass = {
       ...project,
-      notes: [...project.notes, ...[0, 1, 2, 3].map((bar) => ({ id: `b${bar}`, trackId: "bass" as const, pitch: 36, startTick: bar * 1920, durationTicks: 960, velocity: 80, source: "human" as const }))],
+      notes: [
+        ...project.notes,
+        ...[0, 1, 2, 3].map((bar) => ({
+          id: `b${bar}`,
+          trackId: "bass" as const,
+          pitch: 36,
+          startTick: bar * 1920,
+          durationTicks: 960,
+          velocity: 80,
+          source: "human" as const,
+        })),
+      ],
     };
     const result = describeRange(withBass, 0, 4, "en");
     expect(result.findings.some((f) => f.severity === "suggestion")).toBe(false);

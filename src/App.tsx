@@ -13,6 +13,7 @@ import { InstrumentPicker } from "./components/InstrumentPicker";
 import { TakeCard } from "./components/TakeCard";
 import { EditorLayoutContext, KEY_GUTTER, MAX_BAR_WIDTH, MIN_BAR_WIDTH } from "./components/editorLayout";
 import { HelpDialog } from "./components/HelpDialog";
+import { NoticeToast } from "./components/NoticeToast";
 import { PianoRoll } from "./components/PianoRoll";
 import { TransportBar } from "./components/TransportBar";
 import { WelcomeCard } from "./components/WelcomeCard";
@@ -25,6 +26,7 @@ import { useProjectStore } from "./store/projectStore";
 import { PROJECT_BARS, TRACK_IDS } from "./types";
 import { useActivityStore } from "./webmcp/activity";
 import { registerWebMCPTools } from "./webmcp/registerTools";
+import { syncEngine } from "./sync/syncEngine";
 
 const COMPUTER_KEYS: Record<string, number> = {
   a: 60,
@@ -93,6 +95,9 @@ function App() {
   useEffect(() => {
     document.documentElement.lang = locale;
   }, [locale]);
+  useEffect(() => {
+    void syncEngine.resume();
+  }, []);
   useEffect(() => {
     if (isAudioUnlocked()) applyInstruments(project.instruments);
   }, [project.instruments]);
@@ -184,8 +189,12 @@ function App() {
 
   const handleConnectMidi = useCallback(async () => {
     try {
-      await connectMidi({
-        onStatus: (device, supported) => useProjectStore.getState().setMidiStatus(supported, device),
+      const input = await connectMidi({
+        onStatus: (device, supported) => {
+          const current = useProjectStore.getState();
+          current.setMidiStatus(supported, device);
+          if (device) current.setNotice(null);
+        },
         onNoteOn: (pitch, velocity, timestamp, channel) => {
           liveInput.getState().pulse();
           recorder.noteOn(`midi:${channel}:${pitch}`, pitch, velocity, timestamp);
@@ -195,6 +204,10 @@ function App() {
           recorder.noteOff(`midi:${channel}:${pitch}`, timestamp);
         },
       });
+      if (!input) {
+        const current = useProjectStore.getState();
+        current.setNotice(t(current.locale, "midiNoInputs"));
+      }
     } catch {
       useProjectStore.getState().setMidiStatus(true, null);
       announce(t(useProjectStore.getState().locale, "midiUnavailable"));
@@ -473,6 +486,7 @@ function App() {
       <div className="sr-only" aria-live="polite">
         {state.announcement}
       </div>
+      <NoticeToast />
       <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
     </main>
   );

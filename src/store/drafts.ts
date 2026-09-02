@@ -41,9 +41,14 @@ export function diffProjects(
     tempo: before.tempo !== next.tempo ? next.tempo : undefined,
     keyCenter: before.keyCenter !== next.keyCenter ? next.keyCenter : undefined,
     mode: before.mode !== next.mode ? next.mode : undefined,
-    sections: JSON.stringify(before.sections ?? []) !== JSON.stringify(next.sections ?? []) ? next.sections : undefined,
+    sections:
+      JSON.stringify(before.sections ?? []) !== JSON.stringify(next.sections ?? [])
+        ? next.sections
+        : undefined,
     instruments:
-      JSON.stringify(before.instruments ?? {}) !== JSON.stringify(next.instruments ?? {}) ? next.instruments : undefined,
+      JSON.stringify(before.instruments ?? {}) !== JSON.stringify(next.instruments ?? {})
+        ? next.instruments
+        : undefined,
   };
 }
 
@@ -59,7 +64,10 @@ export function applyDraftPatch(project: Project, draft: Pick<Draft, "patch">): 
   const addIds = new Set(patch.addNotes.map((note) => note.id));
   const notes = [
     ...project.notes.filter(
-      (note) => !removeIds.has(note.id) && !addIds.has(note.id) && !patch.replaces.some((region) => inRegion(note, region)),
+      (note) =>
+        !removeIds.has(note.id) &&
+        !addIds.has(note.id) &&
+        !patch.replaces.some((region) => inRegion(note, region)),
     ),
     ...patch.addNotes,
   ];

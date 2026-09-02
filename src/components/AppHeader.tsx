@@ -18,6 +18,7 @@ import { chordPitches } from "../music/voicing";
 import { useProjectStore } from "../store/projectStore";
 import { KEY_CENTERS, MODES, type Mode } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { LiveSession } from "./LiveSession";
 import { Popover } from "./Popover";
 import { isAgentBusy, useActivityStore } from "../webmcp/activity";
 
@@ -244,6 +245,8 @@ export function AppHeader({ siteToolsReady, onConnectMidi, onHelp, onAiInfo }: A
             {midiDevice ? <i className="midi-led" aria-label={t(locale, "midiLive")} /> : null}
           </button>
         ) : null}
+
+        <LiveSession />
 
         <button
           type="button"

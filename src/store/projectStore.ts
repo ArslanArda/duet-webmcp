@@ -109,6 +109,8 @@ export interface ProjectState {
   midiDevice: string | null;
   midiSupported: boolean;
   announcement: string;
+  /** Visible, dismissible notice (MIDI availability, sync warnings). */
+  notice: string | null;
 
   setSelection: (selection: Selection | null, source?: NoteSource) => void;
   setActiveTrack: (trackId: TrackId) => void;
@@ -153,6 +155,13 @@ export interface ProjectState {
   resetOnboarding: () => void;
   dismissGuide: () => void;
   setAnnouncement: (message: string) => void;
+  setNotice: (message: string | null) => void;
+  /** Hydrate state arriving from a live sync session; never touches undo history. */
+  applyRemoteSnapshot: (snapshot: {
+    project: Project;
+    selection: Selection | null;
+    changeLog: Change[];
+  }) => void;
 }
 
 const safeStorage = {
@@ -232,6 +241,7 @@ export const useProjectStore = create<ProjectState>()(
         midiDevice: null,
         midiSupported: typeof navigator !== "undefined" && "requestMIDIAccess" in navigator,
         announcement: "",
+        notice: null,
 
         setSelection: (selection, source = "human") =>
           set((state) => ({
@@ -277,7 +287,11 @@ export const useProjectStore = create<ProjectState>()(
             return {
               drafts: remaining,
               activeDraftId: remaining[remaining.length - 1]?.id ?? null,
-              humanLog: pushLog(state, { type: "draft_accepted", bars: draft.affectedBars, detail: draft.label }),
+              humanLog: pushLog(state, {
+                type: "draft_accepted",
+                bars: draft.affectedBars,
+                detail: draft.label,
+              }),
             };
           });
           return change;
@@ -567,6 +581,14 @@ export const useProjectStore = create<ProjectState>()(
         resetOnboarding: () => set({ onboarding: [false, false, false], guideDismissed: false }),
         dismissGuide: () => set({ guideDismissed: true }),
         setAnnouncement: (announcement) => set({ announcement }),
+        setNotice: (notice) => set({ notice }),
+        applyRemoteSnapshot: (snapshot) =>
+          set((state) => ({
+            project: snapshot.project,
+            selection: snapshot.selection,
+            changeLog: snapshot.changeLog,
+            stateVersion: state.stateVersion + 1,
+          })),
       };
     },
     {

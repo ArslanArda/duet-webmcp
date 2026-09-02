@@ -1,0 +1,4 @@
+project_id = "duet-webmcp"
+
+[functions.duet-sync]
+verify_jwt = false

@@ -1621,6 +1621,120 @@ button.step:hover {
   background: var(--danger-soft);
 }
 
+/* ---------- live session & notices ---------- */
+.sync-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  background: var(--text-3);
+  flex: none;
+}
+.sync-dot.phase-live {
+  background: var(--ok);
+  box-shadow: 0 0 6px rgba(108, 224, 170, 0.7);
+}
+.sync-dot.phase-connecting,
+.sync-dot.phase-reconnecting {
+  background: var(--agent);
+  animation: blink 1s ease-in-out infinite;
+}
+.sync-dot.phase-offline {
+  background: var(--danger);
+}
+.live-button.phase-live {
+  color: var(--ok);
+  border-color: rgba(108, 224, 170, 0.3);
+}
+.popover.live-popover {
+  width: 340px;
+}
+.live-popover .wide {
+  width: 100%;
+  justify-content: center;
+}
+.join-label {
+  margin-top: 14px;
+}
+.join-row {
+  display: flex;
+  gap: 8px;
+}
+.join-row input {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  padding: 0 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--fs-1);
+}
+.room-code-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.room-code {
+  display: block;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--bg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--fs-2);
+  letter-spacing: 0.08em;
+  word-break: break-all;
+  user-select: all;
+}
+.sync-status-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--fs-2);
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.peer-note {
+  color: var(--agent);
+  margin-top: 6px;
+}
+.live-popover .picker-actions {
+  justify-content: flex-end;
+}
+.notice-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 74px;
+  transform: translateX(-50%);
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(520px, calc(100vw - 24px));
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  color: var(--text-2);
+  font-size: var(--fs-1);
+  line-height: 1.45;
+  box-shadow: var(--shadow);
+  animation: rise 0.25s ease;
+}
+.notice-toast svg:first-child {
+  color: var(--human);
+  flex: none;
+}
+@media (max-width: 1180px) {
+  .live-button .hide-narrow {
+    display: none;
+  }
+}
+
 /* ---------- drafts, sections, sounds ---------- */
 .draft-bar {
   display: flex;
