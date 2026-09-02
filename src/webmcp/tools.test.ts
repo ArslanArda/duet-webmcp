@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { webMCPTools } from "./tools";
 
 describe("WebMCP contracts", () => {
-  it("registers seventeen focused tools", () => {
-    expect(webMCPTools).toHaveLength(17);
-    expect(webMCPTools.filter((tool) => tool.annotations?.readOnlyHint)).toHaveLength(5);
-    expect(new Set(webMCPTools.map((tool) => tool.name)).size).toBe(17);
+  it("registers eighteen focused tools", () => {
+    expect(webMCPTools).toHaveLength(18);
+    expect(webMCPTools.filter((tool) => tool.annotations?.readOnlyHint)).toHaveLength(6);
+    expect(new Set(webMCPTools.map((tool) => tool.name)).size).toBe(18);
   });
   it("keeps every object schema closed", () => {
     webMCPTools.forEach((tool) =>

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { t } from "../i18n";
 import { describeChord, prettySymbol } from "../music/chordCatalog";
 import { useProjectStore } from "../store/projectStore";
+import { applyDraftPatch } from "../store/drafts";
 import { PROJECT_BARS } from "../types";
 import { ChordPicker } from "./ChordPicker";
 import { useEditorLayout } from "./editorLayout";
@@ -21,13 +22,14 @@ export function ChordStrip() {
     activeDraftId,
   } = useProjectStore();
   const activeDraft = drafts.find((draft) => draft.id === activeDraftId) ?? null;
+  const draftChords = activeDraft ? applyDraftPatch(project, activeDraft).chords : null;
   const [editing, setEditing] = useState<{ bar: number; anchor: DOMRect } | null>(null);
 
   return (
     <div className="chord-strip" style={{ width: gridWidth }}>
       {Array.from({ length: PROJECT_BARS }, (_, bar) => {
         const currentSlot = project.chords.find((item) => item.bar === bar);
-        const draftSlot = activeDraft?.nextProject.chords.find((item) => item.bar === bar);
+        const draftSlot = draftChords?.find((item) => item.bar === bar);
         const isDraft = Boolean(activeDraft) && (draftSlot?.symbol ?? null) !== (currentSlot?.symbol ?? null);
         const slot = isDraft ? draftSlot : currentSlot;
         const info = slot ? describeChord(slot.symbol, locale) : null;

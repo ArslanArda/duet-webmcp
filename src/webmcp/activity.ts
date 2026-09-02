@@ -52,6 +52,7 @@ export const TOOL_KINDS: Record<string, ActivityKind> = {
   resolve_draft: "write",
   set_sections: "write",
   set_instrument: "write",
+  describe_selection: "read",
 };
 
 interface ActivityState {
@@ -224,6 +225,9 @@ export function describeActivity(activity: Activity, locale: Locale): string {
     case "get_recent_activity":
     case "suggest_progressions":
       text = t(locale, key(activity.tool));
+      break;
+    case "describe_selection":
+      text = t(locale, key(activity.tool), { bars: affected });
       break;
     case "propose_variations":
       text = t(locale, key(activity.tool), {

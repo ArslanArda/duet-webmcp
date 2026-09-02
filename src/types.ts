@@ -61,17 +61,38 @@ export interface Project {
 }
 
 /**
+ * What a draft would change, expressed relative to whatever the project looks
+ * like when it is accepted, so drafts from different groups can be accepted
+ * one after another without one undoing the other.
+ */
+export interface DraftPatch {
+  /** Regions the draft replaces outright (cleared before its notes are added). */
+  replaces: Array<{ trackId: TrackId; startBar: number; endBar: number }>;
+  addNotes: Note[];
+  removeNoteIds: string[];
+  /** Chord slots to set; a bar listed with symbol null is cleared. */
+  chordBars: Array<{ bar: number; slot: ChordSlot | null }>;
+  tempo?: number;
+  keyCenter?: string;
+  mode?: string;
+  sections?: Section[];
+  instruments?: Partial<Record<TrackId, InstrumentId>>;
+}
+
+/**
  * An agent proposal the person has not accepted yet. Drafts render as ghosts,
- * can be auditioned, and only become a Change when accepted.
+ * can be auditioned, and only become a Change when accepted. Drafts that were
+ * proposed together (A/B/C) share a groupId; accepting one discards its rivals.
  */
 export interface Draft {
   id: string;
+  groupId: string;
   label: string;
   toolName: string;
   summary: string;
   explanation: string;
   affectedBars: { startBar: number; endBar: number };
-  nextProject: Project;
+  patch: DraftPatch;
   createdAt: number;
 }
 

@@ -6,6 +6,7 @@ import { midiToPitchName, scaleChromas } from "../music/theory";
 import { useProjectStore } from "../store/projectStore";
 import { FLASH_MS, useActivityStore } from "../webmcp/activity";
 import { liveInput, useLiveInput } from "../input/liveInput";
+import { applyDraftPatch } from "../store/drafts";
 import { getPlayheadTick } from "../audio/playhead";
 import { MIN_NOTE_TICKS, PROJECT_BARS, TICKS_PER_BAR, TICKS_PER_BEAT, type Note } from "../types";
 import {
@@ -71,18 +72,15 @@ export function PianoRoll() {
   const activeDraft = drafts.find((draft) => draft.id === activeDraftId) ?? null;
   const draftDiff = useMemo(() => {
     if (!activeDraft) return null;
+    const next = applyDraftPatch(project, activeDraft);
     const currentIds = new Set(project.notes.map((note) => note.id));
-    const nextIds = new Set(activeDraft.nextProject.notes.map((note) => note.id));
+    const nextIds = new Set(next.notes.map((note) => note.id));
     return {
-      added: activeDraft.nextProject.notes.filter(
-        (note) => !currentIds.has(note.id) && note.trackId === activeTrack,
-      ),
+      added: next.notes.filter((note) => !currentIds.has(note.id) && note.trackId === activeTrack),
       removed: project.notes.filter((note) => !nextIds.has(note.id) && note.trackId === activeTrack),
-      otherAdded: activeDraft.nextProject.notes.filter(
-        (note) => !currentIds.has(note.id) && note.trackId !== activeTrack,
-      ),
+      otherAdded: next.notes.filter((note) => !currentIds.has(note.id) && note.trackId !== activeTrack),
     };
-  }, [activeDraft, project.notes, activeTrack]);
+  }, [activeDraft, project, activeTrack]);
   const gridRef = useRef<HTMLCanvasElement | null>(null);
   const overlayRef = useRef<HTMLCanvasElement | null>(null);
   const keysRef = useRef<HTMLCanvasElement | null>(null);

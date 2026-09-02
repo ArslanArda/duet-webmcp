@@ -20,6 +20,7 @@ import type {
   TrackId,
 } from "../types";
 import { PROJECT_BARS, TICKS_PER_BAR, TRACK_IDS } from "../types";
+import { applyDraftPatch } from "./drafts";
 import { createDemoProject, createEmptyProject } from "./seed";
 
 const HISTORY_LIMIT = 100;
@@ -269,17 +270,16 @@ export const useProjectStore = create<ProjectState>()(
             summary: draft.summary,
             explanation: draft.explanation,
             affectedBars: draft.affectedBars,
-            nextProject: { ...draft.nextProject },
+            nextProject: applyDraftPatch(get().project, draft),
           });
-          set((state) => ({
-            drafts: [],
-            activeDraftId: null,
-            humanLog: pushLog(state, {
-              type: "draft_accepted",
-              bars: draft.affectedBars,
-              detail: draft.label,
-            }),
-          }));
+          set((state) => {
+            const remaining = state.drafts.filter((item) => item.groupId !== draft.groupId);
+            return {
+              drafts: remaining,
+              activeDraftId: remaining[remaining.length - 1]?.id ?? null,
+              humanLog: pushLog(state, { type: "draft_accepted", bars: draft.affectedBars, detail: draft.label }),
+            };
+          });
           return change;
         },
         discardDraft: (id) =>

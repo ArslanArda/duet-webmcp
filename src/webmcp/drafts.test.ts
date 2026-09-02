@@ -120,4 +120,57 @@ describe("drafts and awareness", () => {
     projectStore.getState().undoChange(projectStore.getState().changeLog[0].id);
     expect(projectStore.getState().project.instruments?.melody).toBeUndefined();
   });
+
+  it("accepting one option keeps options from other groups and applies them on top", async () => {
+    const chords = (await tool("propose_variations").execute({
+      kind: "chords",
+      startBar: 0,
+      endBar: 4,
+      count: 2,
+    })) as {
+      drafts: Array<{ id: string }>;
+    };
+    const other = (await tool("set_chord_progression").execute({ startBar: 8, chords: ["Am", "Dm"] })) as {
+      draftId: string;
+    };
+    expect(projectStore.getState().drafts).toHaveLength(3);
+    await tool("resolve_draft").execute({ action: "accept", draftId: chords.drafts[1].id });
+    expect(projectStore.getState().drafts.map((d) => d.id)).toEqual([other.draftId]);
+    await tool("resolve_draft").execute({ action: "accept", draftId: other.draftId });
+    const symbols = projectStore.getState().project.chords.map((slot) => slot.symbol);
+    expect(symbols[8]).toBe("Am");
+    expect(symbols.slice(0, 4).every((symbol) => symbol.length > 0)).toBe(true);
+  });
+
+  it("a later-accepted rival replaces an earlier one in the same region", async () => {
+    const a = (await tool("generate_line").execute({
+      role: "bass",
+      startBar: 0,
+      endBar: 2,
+      style: "simple",
+    })) as { draftId: string };
+    const b = (await tool("generate_line").execute({
+      role: "bass",
+      startBar: 0,
+      endBar: 2,
+      style: "flowing",
+    })) as { draftId: string };
+    await tool("resolve_draft").execute({ action: "accept", draftId: a.draftId });
+    const afterA = projectStore.getState().project.notes.filter((n) => n.trackId === "bass").length;
+    await tool("resolve_draft").execute({ action: "accept", draftId: b.draftId });
+    const bass = projectStore.getState().project.notes.filter((n) => n.trackId === "bass");
+    expect(afterA).toBeGreaterThan(0);
+    expect(bass.length).toBeGreaterThan(afterA);
+    expect(bass.filter((n) => n.changeId === a.draftId)).toHaveLength(0);
+  });
+
+  it("diagnoses what is missing in the selection", async () => {
+    projectStore.getState().setSelection({ trackId: "melody", startBar: 0, endBar: 4 });
+    const result = (await tool("describe_selection").execute({})) as {
+      ok: boolean;
+      findings: Array<{ code: string }>;
+    };
+    expect(result.ok).toBe(true);
+    expect(result.findings.map((f) => f.code)).toContain("NO_BASS");
+  });
 });

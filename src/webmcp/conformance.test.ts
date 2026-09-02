@@ -67,6 +67,7 @@ describe("WebMCP contract", () => {
       .sort();
     expect(readOnly).toEqual([
       "analyze_harmony",
+      "describe_selection",
       "get_project_state",
       "get_recent_activity",
       "get_selection",
@@ -118,6 +119,11 @@ describe("every tool answers a golden call with a JSON-serializable result", () 
       "suggest_progressions",
       { mood: "jazzy", bars: 4 },
       (r) => expect((r.options as unknown[]).length).toBeGreaterThan(0),
+    ],
+    [
+      "describe_selection",
+      { startBar: 0, endBar: 4 },
+      (r) => expect((r.findings as unknown[]).length).toBeGreaterThan(0),
     ],
     [
       "set_chord_progression",

@@ -6,11 +6,11 @@ describe("WebMCP registration", () => {
     Object.defineProperty(document, "modelContext", { value: undefined, configurable: true });
     await expect(registerWebMCPTools()).resolves.toMatchObject({ supported: false, count: 0 });
   });
-  it("registers all seventeen tools on the top-level document", async () => {
+  it("registers all eighteen tools on the top-level document", async () => {
     const registerTool = vi.fn(async () => undefined);
     Object.defineProperty(document, "modelContext", { value: { registerTool }, configurable: true });
     const result = await registerWebMCPTools();
-    expect(result).toMatchObject({ supported: true, count: 17 });
-    expect(registerTool).toHaveBeenCalledTimes(17);
+    expect(result).toMatchObject({ supported: true, count: 18 });
+    expect(registerTool).toHaveBeenCalledTimes(18);
   });
 });

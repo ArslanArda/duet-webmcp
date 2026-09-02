@@ -21,6 +21,8 @@ import { DEFAULT_INSTRUMENTS } from "../audio/player";
 import { liveInput } from "../input/liveInput";
 import { useActivityStore } from "./activity";
 import { projectStore, validTrackIds } from "../store/projectStore";
+import { diffProjects } from "../store/drafts";
+import { describeRange } from "../music/describe";
 import type {
   Draft,
   InstrumentId,
@@ -139,6 +141,38 @@ interface DraftResult {
   hint: string;
 }
 
+interface DraftOptions {
+  groupId?: string;
+  /** Region the tool replaces outright; lets a later-accepted rival clear an earlier one. */
+  replaces?: Array<{ trackId: TrackId; startBar: number; endBar: number }>;
+}
+
+function storeDraft(
+  nextProject: Project,
+  toolName: string,
+  summary: string,
+  explanation: string,
+  affectedBars: { startBar: number; endBar: number },
+  label: string,
+  id: string,
+  options: DraftOptions = {},
+): Draft {
+  const before = projectStore.getState().project;
+  const draft: Draft = {
+    id,
+    groupId: options.groupId ?? id,
+    label,
+    toolName,
+    summary,
+    explanation,
+    affectedBars,
+    patch: diffProjects(before, nextProject, options.replaces ?? []),
+    createdAt: Date.now(),
+  };
+  projectStore.getState().addDraft(draft);
+  return draft;
+}
+
 function commitOrDraft(
   mode: "draft" | "apply",
   nextProject: Project,
@@ -148,19 +182,10 @@ function commitOrDraft(
   affectedBars: { startBar: number; endBar: number },
   label: string,
   id = nanoid(),
+  options: DraftOptions = {},
 ): ToolSuccess | DraftResult {
   if (mode === "apply") return commit(nextProject, toolName, summary, explanation, affectedBars, id);
-  const draft: Draft = {
-    id,
-    label,
-    toolName,
-    summary,
-    explanation,
-    affectedBars,
-    nextProject,
-    createdAt: Date.now(),
-  };
-  projectStore.getState().addDraft(draft);
+  storeDraft(nextProject, toolName, summary, explanation, affectedBars, label, id, options);
   const state = projectStore.getState();
   return {
     ok: true,
@@ -431,6 +456,7 @@ export const webMCPTools: WebMCPTool[] = [
         range,
         chords.join(" – "),
         id,
+        { replaces: [{ trackId: "chords", ...range }] },
       );
     },
   },
@@ -737,6 +763,7 @@ export const webMCPTools: WebMCPTool[] = [
         range,
         `${style} ${role.replace("_", " ")}`,
         id,
+        { replaces: preserveExisting ? [] : [{ trackId: targetTrack, ...range }] },
       );
     },
   },
@@ -944,24 +971,17 @@ export const webMCPTools: WebMCPTool[] = [
       const startTick = range.startBar * TICKS_PER_BAR;
       const endTick = range.endBar * TICKS_PER_BAR;
       const created: Array<{ id: string; label: string; summary: string }> = [];
+      const groupId = nanoid();
       const addDraft = (
         label: string,
         nextProject: Project,
         toolName: string,
         summary: string,
         explanation: string,
+        replaces: DraftOptions["replaces"],
       ) => {
         const id = nanoid();
-        projectStore.getState().addDraft({
-          id,
-          label,
-          toolName,
-          summary,
-          explanation,
-          affectedBars: range,
-          nextProject,
-          createdAt: Date.now(),
-        });
+        storeDraft(nextProject, toolName, summary, explanation, range, label, id, { groupId, replaces });
         created.push({ id, label, summary });
       };
       if (kind === "chords") {
@@ -1007,6 +1027,7 @@ export const webMCPTools: WebMCPTool[] = [
               `AI ${barsLabel(range)}. ölçülere ${option.chords.length} akor koydu (${option.label}).`,
             ),
             option.why,
+            [{ trackId: "chords", ...range }],
           );
         });
       } else if (kind === "answer") {
@@ -1045,6 +1066,7 @@ export const webMCPTools: WebMCPTool[] = [
               `Your rhythm is kept; pitches are moved through the ${state.project.keyCenter} ${state.project.mode} scale and pulled onto chord tones on strong beats.`,
               `Ritmin korundu; sesler ${state.project.keyCenter} ${state.project.mode} gamı içinde taşındı ve güçlü vuruşlarda akor seslerine çekildi.`,
             ),
+            [{ trackId: "melody", ...range }],
           );
         });
       } else {
@@ -1090,6 +1112,7 @@ export const webMCPTools: WebMCPTool[] = [
               `Pitches come from each bar's chord tones; the ${style} style decides the rhythm.`,
               `Sesler her ölçünün akor seslerinden geliyor; ritmi ${style} stili belirliyor.`,
             ),
+            role === "counter_melody" ? [] : [{ trackId: targetTrack, ...range }],
           );
         });
       }
@@ -1202,13 +1225,14 @@ export const webMCPTools: WebMCPTool[] = [
         target,
         `${style} answer · ${notes.length} notes`,
         id,
+        { replaces: [{ trackId: "melody", ...target }] },
       );
     },
   },
   {
     name: "resolve_draft",
     description:
-      "Accept or discard drafts you proposed. Use after the person tells you which option they like; accepting writes it to the song as a normal undoable change. Without draftId, acts on the option currently previewed on the page.",
+      "Accept or discard drafts you proposed. Use after the person tells you which option they like; accepting writes it to the song as a normal undoable change and discards only its rival options (same group), so options for other bars or tracks stay available. Without draftId, acts on the option currently previewed on the page.",
     inputSchema: objectSchema(
       { action: enumValue(["accept", "discard", "discard_all"]), draftId: { type: "string", maxLength: 32 } },
       ["action"],
@@ -1355,6 +1379,29 @@ export const webMCPTools: WebMCPTool[] = [
         { startBar: 0, endBar: state.project.barCount },
         nanoid(),
       );
+    },
+  },
+
+  {
+    name: "describe_selection",
+    description:
+      "Use this when the person says something is missing or asks what could be better but cannot say what. Returns a deterministic plain-language diagnosis of the selected bars (or a given range): empty tracks, missing or static chords, a melody that circles or leaps, notes clashing with their chord or outside the key, each with a suggested tool call. Read it, then offer choices.",
+    inputSchema: objectSchema({ startBar: integer(0, 15), endBar: integer(1, 16) }),
+    annotations: { readOnlyHint: true },
+    execute: (args) => {
+      const state = projectStore.getState();
+      const startBar = typeof args.startBar === "number" ? args.startBar : (state.selection?.startBar ?? 0);
+      const endBar =
+        typeof args.endBar === "number" ? args.endBar : (state.selection?.endBar ?? state.project.barCount);
+      const range = barRange(startBar, endBar);
+      if ("ok" in range) return range;
+      const description = describeRange(state.project, range.startBar, range.endBar, state.locale);
+      return {
+        ok: true,
+        stateVersion: state.stateVersion,
+        ...description,
+        hint: "Tell the person the two or three most useful findings in everyday words, then use the suggested actions (usually propose_variations) so they can pick by ear.",
+      };
     },
   },
 ];

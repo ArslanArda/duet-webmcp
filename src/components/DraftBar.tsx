@@ -2,6 +2,7 @@ import { Check, Sparkles, Volume2, X } from "lucide-react";
 import { playProject, stopPlayback, unlockAudio } from "../audio/player";
 import { t } from "../i18n";
 import { useProjectStore } from "../store/projectStore";
+import { applyDraftPatch } from "../store/drafts";
 
 /** Agent proposals wait here: audition each by ear, then accept or discard. */
 export function DraftBar() {
@@ -15,6 +16,7 @@ export function DraftBar() {
     setPlaying,
     setAnnouncement,
     isLooping,
+    project,
   } = useProjectStore();
   if (!drafts.length) return null;
   const active = drafts.find((draft) => draft.id === activeDraftId) ?? drafts[drafts.length - 1];
@@ -23,7 +25,10 @@ export function DraftBar() {
     if (!(await unlockAudio())) return;
     const { startBar, endBar } = active.affectedBars;
     if (
-      playProject(active.nextProject, startBar, endBar, { loop: isLooping, onEnded: () => setPlaying(false) })
+      playProject(applyDraftPatch(project, active), startBar, endBar, {
+        loop: isLooping,
+        onEnded: () => setPlaying(false),
+      })
     )
       setPlaying(true);
   };
