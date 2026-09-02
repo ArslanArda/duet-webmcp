@@ -1948,16 +1948,13 @@ button.step:hover {
     width: 32px;
     height: 32px;
   }
+  /* Wrap instead of scrolling: an overflow scroller would clip the
+     absolutely-positioned popovers (Project, Key, Tempo, Live). */
   .header-controls {
     width: 100%;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     justify-content: flex-start;
-    overflow-x: auto;
-    scrollbar-width: none;
-    padding-bottom: 2px;
-  }
-  .header-controls > * {
-    flex: none;
+    row-gap: 6px;
   }
   .hint-long {
     display: none;
@@ -2094,8 +2091,20 @@ button.step:hover {
   .play-button {
     min-width: 0;
   }
+  /* Header popovers: the header's backdrop-filter makes it the containing
+     block for fixed descendants, so anchor to its top, not the viewport. */
   .popover.key-picker,
   .popover.tempo-picker,
+  .popover.live-popover {
+    position: fixed;
+    left: 8px;
+    right: 8px;
+    width: auto;
+    top: 8px;
+    bottom: auto;
+    max-height: calc(100vh - 16px);
+    overflow: auto;
+  }
   .popover.more-menu {
     position: fixed;
     left: 8px;
