@@ -29,6 +29,6 @@
 ## Layout
 
 `App.tsx` composes `AppHeader` (project menu, key/mood and tempo pickers), `WelcomeCard`, the editor head (Draw/Erase, track tabs, zoom, legend), a scrollable grid made of `BarRuler` (drag to select), `ChordStrip` (+ `ChordPicker`) and `PianoRoll` (layered canvases: grid, overlay), `TransportBar`, and `AiPanel` (bottom sheet on small screens).
-- Write tools go through `commitOrDraft()`: default `mode: "draft"` stores a `Draft` (a full alternative `Project`) in the store; the person accepts it from `DraftBar`, which turns it into a normal `Change`. Only `set_tempo`, `set_sections`, `set_instrument` and `resolve_draft` write directly.
+- Write tools go through `commitOrDraft()`: default `mode: "draft"` stores a `Draft` whose `patch` (see `src/store/drafts.ts`) is applied to the project at accept time; pass `replaces` for regions a tool overwrites and a shared `groupId` for A/B/C options. The person accepts from `DraftBar`, which turns it into a normal `Change` and discards only the same group. Only `set_tempo`, `set_sections`, `set_instrument` and `resolve_draft` write directly.
 - Human actions are logged through `pushLog()` in the store (`humanLog`) and exposed by `get_recent_activity`; when adding a mutation, log it.
-- Plain-language music knowledge lives in `src/music/progressions.ts` (moods → progressions) and `src/music/answer.ts` (call and response); both are deterministic and unit-tested.
+- Plain-language music knowledge lives in `src/music/progressions.ts` (moods → progressions), `src/music/answer.ts` (call and response) and `src/music/describe.ts` (diagnosis); all deterministic and unit-tested.

@@ -26,7 +26,7 @@ The instrumentation lives in `src/webmcp/activity.ts`; `registerTools.ts` wraps 
 
 ## Site tools
 
-Seventeen tools, five read-only. Musical writes default to **draft** mode: the result appears on the page as a ghost preview with Listen / Accept / Discard, and nothing is written until the person (or `resolve_draft`) accepts. Every write accepts an optional `expectedStateVersion` and is rejected with `STALE_STATE` if the person changed the page in between.
+Eighteen tools, six read-only. Musical writes default to **draft** mode: the result appears on the page as a ghost preview with Listen / Accept / Discard, and nothing is written until the person (or `resolve_draft`) accepts. Options proposed together form a group; accepting one discards only its rivals, so chord options and bass options can be picked one after another and compose correctly. Every write accepts an optional `expectedStateVersion` and is rejected with `STALE_STATE` if the person changed the page in between.
 
 | Tool | Type | Purpose |
 | --- | --- | --- |
@@ -34,6 +34,7 @@ Seventeen tools, five read-only. Musical writes default to **draft** mode: the r
 | `get_recent_activity` | Read | What the person did since a state version: takes, notes added/deleted, chords set, selection moves, undo, drafts accepted or discarded. |
 | `get_selection` | Read | The exact notes and chords in the selected bars. |
 | `analyze_harmony` | Read | Chord functions and best-fitting mode, computed with `tonal`. |
+| `describe_selection` | Read | Deterministic plain-language diagnosis of a range: empty bass, missing or static chords, a melody that circles or leaps, notes clashing with the chord or the key, each with a suggested tool call. |
 | `suggest_progressions` | Read | Chord progressions for a feeling (happy, sad, dreamy, tense, epic, jazzy, calm), realized in the project key with a one-line reason each. |
 | `set_selection` | Control | Focuses the person's editor on a track and bar range (drawn in amber). |
 | `play` | Control | Plays a range once audio has been unlocked. |
@@ -50,6 +51,7 @@ Seventeen tools, five read-only. Musical writes default to **draft** mode: the r
 
 ## Try these prompts
 
+- “Something feels missing here, give me two or three ideas.”
 - “Answer the phrase I just played.”
 - “Give me two chord ideas for the chorus, something dreamy.”
 - “Write a flowing bass line under it.”
